@@ -2,12 +2,12 @@ import React, { useMemo, useState } from "react";
 import { usersStore, type UserRecord } from "./users.store";
 import type { Role } from "../../auth/auth.types";
 
-const ROLES: Role[] = ["SUPER_ADMIN", "ADMIN", "COORDINADOR"];
+const ROLES: Role[] = ["SUPER_ADMIN", "COORDINADOR", "MEDICO", "CONSULTA_PD"];
 const ROLE_LABEL: Record<Role, string> = {
-  SUPER_ADMIN: "Super Admin", ADMIN: "Administrador", COORDINADOR: "Coordinador", CONSULTA_PD: "Consulta PD",
+  SUPER_ADMIN: "Super Admin", COORDINADOR: "Coordinador", MEDICO: "Médico", CONSULTA_PD: "Consulta PD",
 };
 const ROLE_RGB: Record<Role, string> = {
-  SUPER_ADMIN: "21,101,192", ADMIN: "38,166,154", COORDINADOR: "109,191,60", CONSULTA_PD: "100,116,139",
+  SUPER_ADMIN: "21,101,192", COORDINADOR: "109,191,60", MEDICO: "38,166,154", CONSULTA_PD: "100,116,139",
 };
 
 function RoleBadge({ role }: { role: Role }) {

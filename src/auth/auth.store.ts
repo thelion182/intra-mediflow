@@ -12,12 +12,12 @@ const DEMO_ACCOUNTS: Array<{ ids: string[]; user: User }> = [
     user: { userId: "F-9999", displayName: "Super Admin (Demo)", role: "SUPER_ADMIN", funcionario: "9999" }
   },
   {
-    ids: ["2001", "F-2001"],
-    user: { userId: "F-2001", displayName: "Administrador (Demo)", role: "ADMIN", funcionario: "2001" }
-  },
-  {
     ids: ["1001", "F-1001"],
     user: { userId: "F-1001", displayName: "Coordinador (Demo)", role: "COORDINADOR", funcionario: "1001" }
+  },
+  {
+    ids: ["5001", "F-5001"],
+    user: { userId: "F-5001", displayName: "Médico (Demo)", role: "MEDICO", funcionario: "5001" }
   },
   {
     ids: ["3001", "F-3001"],
@@ -44,7 +44,7 @@ export const authStore = {
     const raw = storage.get<any>(KEY, null);
     if (!raw) return null;
     // Migra roles legacy en caliente
-    if (raw.role === "SUPLENCIAS") {
+    if (raw.role === "SUPLENCIAS" || raw.role === "ADMIN") {
       const migrated = { ...raw, role: "COORDINADOR" as Role };
       storage.set(KEY, migrated);
       return migrated;

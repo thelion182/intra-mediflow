@@ -24,7 +24,7 @@ export type AsignacionEstado =
   | "CUMPLIDA"
   | "NO_CUMPLIDA";
 
-export type Canal = "APP" | "WHATSAPP" | "SMS" | "EMAIL";
+export type Canal = "APP" | "WHATSAPP" | "EMAIL";
 
 export type Invitacion = {
   medicoId: string;           // userId: "CI-xxxx" o "F-xxxx"

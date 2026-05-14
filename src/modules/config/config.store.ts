@@ -19,10 +19,6 @@ export const DEFAULT_CONFIG: SystemConfig = {
       enabled: true,
       provider: "ENLACE_MANUAL",
     },
-    sms: {
-      enabled: false,
-      provider: "TWILIO",
-    },
     email: {
       enabled: false,
       provider: "SENDGRID",

@@ -298,27 +298,47 @@ export const convocatoriaStore = {
     const inv = (c.invitaciones || []).find(i => i.medicoId === medicoId);
     if (!inv) return;
 
+    const prevEstado = inv.estado;
+
+    function cancelAsig() {
+      const asig = (c.asignaciones || []).find(
+        a => a.medicoId === medicoId && a.estado === "CONFIRMADA"
+      );
+      if (asig) { asig.estado = "CANCELADA_POR_MEDICO"; asig.closedAt = nowIso(); }
+    }
+
     if (nuevoEstado === "ENVIADA") {
+      if (prevEstado === "ACEPTO") cancelAsig();
       inv.estado = "ENVIADA";
       inv.sentAt = nowIso();
       delete (inv as any).seenAt;
       delete (inv as any).respondedAt;
     } else if (nuevoEstado === "ACEPTO") {
-      if (inv.estado === "ACEPTO") return;
+      if (prevEstado === "ACEPTO") return;
+      const aceptados = (c.invitaciones || []).filter(i => i.estado === "ACEPTO").length;
+      if (aceptados >= c.cupos) return; // cupos llenos, no se puede agregar más
       inv.estado = "ACEPTO";
       inv.respondedAt = nowIso();
-      const asign: Asignacion = {
-        id: newId("A"),
-        medicoId,
-        estado: "CONFIRMADA",
-        createdAt: nowIso(),
-      };
-      c.asignaciones.unshift(asign);
+      const existingAsig = (c.asignaciones || []).find(
+        a => a.medicoId === medicoId && a.estado === "CONFIRMADA"
+      );
+      if (!existingAsig) {
+        const asign: Asignacion = { id: newId("A"), medicoId, estado: "CONFIRMADA", createdAt: nowIso() };
+        c.asignaciones.unshift(asign);
+      }
+      // Si se llenó el último cupo → auto-SIN_RESPUESTA los que siguen en ENVIADA
+      if (aceptados + 1 >= c.cupos) {
+        for (const other of c.invitaciones) {
+          if (other.medicoId === medicoId) continue;
+          if (other.estado === "ENVIADA") { other.estado = "SIN_RESPUESTA"; other.respondedAt = nowIso(); }
+        }
+      }
     } else if (nuevoEstado === "RECHAZO") {
-      if (inv.estado === "RECHAZO") return;
+      if (prevEstado === "ACEPTO") cancelAsig();
       inv.estado = "RECHAZO";
       inv.respondedAt = nowIso();
     } else if (nuevoEstado === "SIN_RESPUESTA") {
+      if (prevEstado === "ACEPTO") cancelAsig();
       inv.estado = "SIN_RESPUESTA";
       inv.respondedAt = nowIso();
     }

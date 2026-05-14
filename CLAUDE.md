@@ -61,10 +61,12 @@ registra las respuestas de los médicos a mano, y carga el Parte Diario manualme
 | ID demo | Rol | Acceso |
 |---------|-----|--------|
 | F-9999  | SUPER_ADMIN | Todo |
-| F-2001  | ADMIN | Catálogos, reportes, usuarios |
-| F-1001  | COORDINADOR | Dashboard, nueva convocatoria, despacho, parte diario |
+| F-1001  | COORDINADOR | Dashboard, nueva convocatoria, despacho, parte diario, admin, configuración |
+| F-5001  | MEDICO | Solo Parte Diario (reservado para futura app móvil) |
+| F-3001  | CONSULTA_PD | Solo Parte Diario (lectura) |
 
-> **No hay rol MÉDICO** — los médicos no usan el sistema, responden por WhatsApp.
+> ADMIN fue fusionado en COORDINADOR. COORDINADOR tiene acceso completo incluyendo Configuración.
+> MEDICO existe en el sistema para escalabilidad futura (app móvil) pero actualmente ve solo Parte Diario.
 
 ---
 

@@ -9,6 +9,7 @@ import { medicosStore } from "../admin/medicos.store";
 import { sectoresStore } from "../admin/sectores.store";
 import { sedesStore } from "../admin/sedes.store";
 import type { MedicoTipo, MedicoGremio } from "../admin/medicos.types";
+import type { Canal } from "./convocatoria.types";
 
 type TipoFiltro   = "TODOS" | MedicoTipo;
 type GremioFiltro = "TODOS" | MedicoGremio;
@@ -126,6 +127,17 @@ export function NuevaConvocatoria() {
 
   // ── Prioridad de destinatarios ─────────────────────────────────────────
   const [prioMode, setPrioMode] = useState<PrioMode>("SCORING");
+
+  // ── Canales de despacho ────────────────────────────────────────────────
+  const [canalesSel, setCanalesSel] = useState<Canal[]>(["WHATSAPP"]);
+  function toggleCanal(c: Canal) {
+    setCanalesSel(prev =>
+      prev.includes(c) ? (prev.length > 1 ? prev.filter(x => x !== c) : prev) : [...prev, c]
+    );
+  }
+
+  // ── Cantidad máxima para el panel de despacho ─────────────────────────
+  const [maxDespacho, setMaxDespacho] = useState(0); // 0 = todos
 
   // ── Filtros de médicos ─────────────────────────────────────────────────
   const [qMedico,      setQMedico]      = useState("");
@@ -294,6 +306,7 @@ export function NuevaConvocatoria() {
       });
     }
 
+    const dest = maxDespacho > 0 ? destinatarios.slice(0, maxDespacho) : destinatarios;
     const c = convocatoriaStore.createAndSend({
       sector:      sectorFinal,
       sede:        sedeFinal,
@@ -304,10 +317,10 @@ export function NuevaConvocatoria() {
       prioridad,
       notas:       notas.trim() || undefined,
       createdBy:   session.userId,
-      destinatarios,
+      destinatarios: dest,
       keepOrder:   true,
       modoEnvio:   "MASIVO",
-      canales:     ["WHATSAPP"],
+      canales:     canalesSel,
       prioMode,
     });
     nav(`/dashboard/c/${c.id}`);
@@ -321,7 +334,12 @@ export function NuevaConvocatoria() {
         <div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: "-0.03em" }}>Nueva Convocatoria</h1>
           <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--muted)" }}>
-            <span style={{ fontWeight: 600, color: "var(--text)" }}>{destinatarios.length}</span> médicos seleccionados ·
+            <span style={{ fontWeight: 600, color: "var(--text)" }}>
+              {maxDespacho > 0 ? Math.min(maxDespacho, destinatarios.length) : destinatarios.length}
+            </span> al panel
+            {maxDespacho > 0 && destinatarios.length > maxDespacho && (
+              <span style={{ color: "var(--subtle)" }}> (de {destinatarios.length})</span>
+            )} ·
             <span style={{ marginLeft: 6, fontWeight: 600, color: "var(--text)" }}>{cuposNum}</span> cupo{cuposNum !== 1 ? "s" : ""}
           </p>
         </div>
@@ -403,6 +421,33 @@ export function NuevaConvocatoria() {
                     }}>{p === "ALTA" ? "🔴 ALTA" : "⚪ NORMAL"}</button>
                   ))}
                 </div>
+              </Field>
+
+              {/* Canales de despacho */}
+              <Field label="Canales de despacho">
+                <div style={{ display: "flex", gap: 6 }}>
+                  {([
+                    { c: "WHATSAPP" as Canal, label: "WhatsApp", rgb: "37,211,102" },
+                    { c: "EMAIL"    as Canal, label: "Email",    rgb: "38,166,154" },
+                    { c: "APP"      as Canal, label: "App",      rgb: "21,101,192" },
+                  ]).map(({ c: canal, label, rgb }) => {
+                    const sel = canalesSel.includes(canal);
+                    return (
+                      <button key={canal} onClick={() => toggleCanal(canal)} style={{
+                        flex: 1, padding: "8px 0", borderRadius: 9, fontSize: 12, fontWeight: 600,
+                        border: `1.5px solid ${sel ? `rgba(${rgb},0.60)` : "var(--border)"}`,
+                        background: sel ? `rgba(${rgb},0.10)` : "var(--surface-2)",
+                        color: sel ? `rgb(${rgb})` : "var(--muted)", cursor: "pointer",
+                      }}>{sel ? "✓ " : ""}{label}</button>
+                    );
+                  })}
+                </div>
+              </Field>
+
+              {/* Cantidad máxima para panel de despacho */}
+              <Field label="Médicos en panel de despacho" hint="0 = todos los seleccionados. Si ponés 5, solo los primeros 5 irán al panel.">
+                <input style={inputStyle} type="number" min={0} value={maxDespacho}
+                  onChange={e => setMaxDespacho(Math.max(0, Number(e.target.value)))} />
               </Field>
 
               {/* Modo de priorización */}
@@ -703,13 +748,24 @@ export function NuevaConvocatoria() {
                       </div>
                     )}
 
-                    {/* En modo SCORING: mostrar prioridad de catálogo como referencia */}
+                    {/* En modo SCORING: mostrar prioridad de catálogo + score manual si existe */}
                     {prioMode === "SCORING" && ov === undefined && (
-                      <span style={{
-                        fontSize: 11, padding: "2px 7px", borderRadius: 6, flexShrink: 0,
-                        background: "var(--surface)", border: "1px solid var(--border-2)",
-                        color: "var(--subtle)",
-                      }}>P{eff === 9999 ? "—" : eff}</span>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, flexShrink: 0 }}>
+                        <span style={{
+                          fontSize: 12, padding: "3px 9px", borderRadius: 7, fontWeight: 700,
+                          background: eff !== 9999 ? "rgba(21,101,192,0.10)" : "var(--surface-2)",
+                          border: `1px solid ${eff !== 9999 ? "rgba(21,101,192,0.30)" : "var(--border-2)"}`,
+                          color: eff !== 9999 ? "var(--blue)" : "var(--subtle)",
+                        }}>P{eff === 9999 ? "—" : eff}</span>
+                        {(m as any).scoreManual && (() => {
+                          const s = (m as any).scoreManual;
+                          return (
+                            <span style={{ fontSize: 10, color: "var(--subtle)", lineHeight: 1.2, textAlign: "right" }}>
+                              T:{s.tecnico ?? "—"} PG:{s.postgrado ?? "—"} R:{s.relacionamiento ?? "—"} Q:{s.quejas ?? "—"}
+                            </span>
+                          );
+                        })()}
+                      </div>
                     )}
                   </div>
                 );

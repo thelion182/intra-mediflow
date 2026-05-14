@@ -1,4 +1,4 @@
-export type Canal = "APP" | "WHATSAPP" | "SMS" | "EMAIL";
+export type Canal = "APP" | "WHATSAPP" | "EMAIL";
 
 // ── Canal configs ─────────────────────────────────────────────────────────
 export type AppCanalConfig = {
@@ -19,21 +19,6 @@ export type WhatsAppConfig = {
   authToken?: string;
   fromNumber?: string;
   webhookSecret?: string;
-};
-
-export type SmsProvider = "TWILIO" | "SMSMASSIVOS_UY" | "AWS_SNS";
-
-export type SmsConfig = {
-  enabled: boolean;
-  provider: SmsProvider;
-  accountSid?: string;
-  authToken?: string;
-  fromNumber?: string;
-  webhookSecret?: string;
-  // AWS SNS
-  awsRegion?: string;
-  awsAccessKey?: string;
-  awsSecretKey?: string;
 };
 
 export type EmailProvider = "SENDGRID" | "RESEND" | "SMTP" | "AWS_SES";
@@ -73,7 +58,6 @@ export type SystemConfig = {
   canales: {
     app: AppCanalConfig;
     whatsapp: WhatsAppConfig;
-    sms: SmsConfig;
     email: EmailConfig;
   };
   defaultCanales: Canal[];        // preseleccionados al crear convocatoria
@@ -99,6 +83,5 @@ export type SystemConfig = {
 export const CANAL_META: Record<Canal, { label: string; rgb: string; icon: string }> = {
   APP:      { label: "App",       rgb: "21,101,192",  icon: "⬡" },
   WHATSAPP: { label: "WhatsApp",  rgb: "37,211,102",  icon: "✆" },
-  SMS:      { label: "SMS",       rgb: "217,119,6",   icon: "✉" },
   EMAIL:    { label: "Email",     rgb: "38,166,154",  icon: "✉" },
 };

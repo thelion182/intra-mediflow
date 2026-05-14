@@ -4,10 +4,10 @@ import { configStore } from "./config.store";
 import { authStore } from "../../auth/auth.store";
 import { UsersAdmin } from "./UsersAdmin";
 import { prioAuditStore, type PrioAuditEntry } from "../convocatorias/prio.audit.store";
-import type { SystemConfig, Canal, WhatsAppProvider, SmsProvider, EmailProvider, FotosConfig } from "./config.types";
+import type { SystemConfig, Canal, WhatsAppProvider, EmailProvider, FotosConfig } from "./config.types";
 import { CANAL_META } from "./config.types";
 
-type Tab = "usuarios" | "org" | "defaults" | "scoring" | "auditoria";
+type Tab = "usuarios" | "org" | "canales" | "defaults" | "scoring" | "auditoria";
 
 // ── Toggle ────────────────────────────────────────────────────────────────
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
@@ -126,9 +126,6 @@ export function ConfigPage() {
   function setWhatsApp<K extends keyof SystemConfig["canales"]["whatsapp"]>(k: K, v: any) {
     setCfg(c => ({ ...c, canales: { ...c.canales, whatsapp: { ...c.canales.whatsapp, [k]: v } } }));
   }
-  function setSms<K extends keyof SystemConfig["canales"]["sms"]>(k: K, v: any) {
-    setCfg(c => ({ ...c, canales: { ...c.canales, sms: { ...c.canales.sms, [k]: v } } }));
-  }
   function setEmail<K extends keyof SystemConfig["canales"]["email"]>(k: K, v: any) {
     setCfg(c => ({ ...c, canales: { ...c.canales, email: { ...c.canales.email, [k]: v } } }));
   }
@@ -152,6 +149,7 @@ export function ConfigPage() {
   const tabs: { id: Tab; label: string }[] = [
     { id: "usuarios",  label: "Usuarios" },
     { id: "org",       label: "Organización" },
+    { id: "canales",   label: "Canales" },
     { id: "defaults",  label: "Convocatorias" },
     { id: "scoring",   label: "Scoring" },
     ...(session?.role === "SUPER_ADMIN" ? [{ id: "auditoria" as Tab, label: "Auditoría prioridades" }] : []),
@@ -200,11 +198,11 @@ export function ConfigPage() {
 
       {/* ── Tab: Usuarios ─────────────────────────────────────────────────── */}
       {tab === "usuarios" && (
-        <UsersAdmin currentRole={session?.role ?? "ADMIN"} />
+        <UsersAdmin currentRole={session?.role ?? "COORDINADOR"} />
       )}
 
-      {/* Tab canales removida — INTRA MediFlow solo usa WhatsApp manual */}
-      {false && (
+      {/* ── Tab: Canales ──────────────────────────────────────────────────── */}
+      {tab === "canales" && (
         <div style={{ display: "grid", gap: 16 }}>
 
           {/* Canales por defecto */}
@@ -214,11 +212,10 @@ export function ConfigPage() {
               Estos canales se preseleccionan al crear una nueva convocatoria. El coordinador puede cambiarlos por convocatoria.
             </p>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
-              {(["APP", "WHATSAPP", "SMS", "EMAIL"] as Canal[]).map(canal => {
+              {(["APP", "WHATSAPP", "EMAIL"] as Canal[]).map(canal => {
                 const meta = CANAL_META[canal];
                 const habilitado = canal === "APP" ? cfg.canales.app.enabled
                   : canal === "WHATSAPP" ? cfg.canales.whatsapp.enabled
-                  : canal === "SMS" ? cfg.canales.sms.enabled
                   : cfg.canales.email.enabled;
                 const selected = cfg.defaultCanales.includes(canal);
                 return (
@@ -227,13 +224,10 @@ export function ConfigPage() {
                     onClick={() => habilitado && toggleDefaultCanal(canal)}
                     title={!habilitado ? "Canal deshabilitado — habilitalo primero" : ""}
                     style={{
-                      padding: "8px 14px",
-                      borderRadius: 8,
+                      padding: "8px 14px", borderRadius: 8, fontWeight: 600, fontSize: 13,
                       border: `1.5px solid ${selected && habilitado ? `rgb(${meta.rgb})` : "var(--border)"}`,
                       background: selected && habilitado ? `rgba(${meta.rgb}, 0.10)` : "var(--surface-2)",
                       color: selected && habilitado ? `rgb(${meta.rgb})` : habilitado ? "var(--muted)" : "var(--subtle)",
-                      fontWeight: 600,
-                      fontSize: 13,
                       cursor: habilitado ? "pointer" : "not-allowed",
                       opacity: habilitado ? 1 : 0.5,
                       transition: "all 0.12s",
@@ -249,34 +243,24 @@ export function ConfigPage() {
 
           {/* WhatsApp */}
           <div style={sectionStyle}>
-            <CanalHeader
-              canal="WhatsApp"
-              enabled={cfg.canales.whatsapp.enabled}
-              onToggle={v => setWhatsApp("enabled", v)}
-              rgb={CANAL_META.WHATSAPP.rgb}
-            />
-
+            <CanalHeader canal="WhatsApp" enabled={cfg.canales.whatsapp.enabled}
+              onToggle={v => setWhatsApp("enabled", v)} rgb={CANAL_META.WHATSAPP.rgb} />
             {cfg.canales.whatsapp.enabled && (
               <>
                 <Field label="Proveedor">
-                  <Select
-                    value={cfg.canales.whatsapp.provider}
+                  <Select value={cfg.canales.whatsapp.provider}
                     onChange={v => setWhatsApp("provider", v as WhatsAppProvider)}
                     options={[
-                      { value: "ENLACE_MANUAL",          label: "Enlace manual (wa.me) — actual, sin backend" },
-                      { value: "WHATSAPP_BUSINESS_API",  label: "WhatsApp Business API (Meta)" },
-                      { value: "TWILIO",                 label: "Twilio WhatsApp" },
-                    ]}
-                  />
+                      { value: "ENLACE_MANUAL",         label: "Enlace manual (wa.me) — sin backend" },
+                      { value: "WHATSAPP_BUSINESS_API", label: "WhatsApp Business API (Meta)" },
+                      { value: "TWILIO",                label: "Twilio WhatsApp" },
+                    ]} />
                 </Field>
-
                 {cfg.canales.whatsapp.provider === "ENLACE_MANUAL" && (
                   <div style={infoBoxStyle}>
-                    <b>Modo actual:</b> al enviar convocatoria, el sistema abre un enlace wa.me en el navegador con un mensaje prellenado.
-                    No requiere backend. Para respuestas automáticas, elegí otro proveedor.
+                    <b>Modo actual:</b> el sistema abre un enlace wa.me con mensaje prellenado. No requiere backend.
                   </div>
                 )}
-
                 {cfg.canales.whatsapp.provider === "WHATSAPP_BUSINESS_API" && (
                   <>
                     <div style={{ ...infoBoxStyle, borderColor: "rgba(37,211,102,0.3)" }}>
@@ -285,188 +269,69 @@ export function ConfigPage() {
                     <Field label="Phone Number ID" hint="Meta Business Manager → Cuenta de WhatsApp">
                       <Input value={cfg.canales.whatsapp.phoneNumberId ?? ""} onChange={v => setWhatsApp("phoneNumberId", v)} placeholder="123456789012345" />
                     </Field>
-                    <Field label="Access Token" hint="Token permanente del sistema (no el temporal de pruebas)">
+                    <Field label="Access Token">
                       <Input value={cfg.canales.whatsapp.accessToken ?? ""} onChange={v => setWhatsApp("accessToken", v)} placeholder="EAAXXXXXXX..." type="password" />
                     </Field>
-                    <Field label="Webhook Verify Token" hint="Token secreto para verificar el webhook (lo definís vos)">
-                      <Input value={cfg.canales.whatsapp.webhookVerifyToken ?? ""} onChange={v => setWhatsApp("webhookVerifyToken", v)} placeholder="mi-token-secreto-2024" />
+                    <Field label="Webhook Verify Token">
+                      <Input value={cfg.canales.whatsapp.webhookVerifyToken ?? ""} onChange={v => setWhatsApp("webhookVerifyToken", v)} placeholder="mi-token-secreto" />
                     </Field>
                   </>
                 )}
-
                 {cfg.canales.whatsapp.provider === "TWILIO" && (
                   <>
                     <div style={{ ...infoBoxStyle, borderColor: "rgba(37,211,102,0.3)" }}>
-                      Requiere backend. Twilio enviará mensajes WA Sandbox o número aprobado y recibirá respuestas por webhook.
+                      Requiere backend. Twilio enviará mensajes WA y recibirá respuestas por webhook.
                     </div>
-                    <Field label="Account SID">
-                      <Input value={cfg.canales.whatsapp.accountSid ?? ""} onChange={v => setWhatsApp("accountSid", v)} placeholder="ACxxxxxxxx" />
-                    </Field>
-                    <Field label="Auth Token">
-                      <Input value={cfg.canales.whatsapp.authToken ?? ""} onChange={v => setWhatsApp("authToken", v)} placeholder="xxxxxxxx" type="password" />
-                    </Field>
-                    <Field label="Número Twilio WA" hint="Formato: whatsapp:+14155238886">
-                      <Input value={cfg.canales.whatsapp.fromNumber ?? ""} onChange={v => setWhatsApp("fromNumber", v)} placeholder="whatsapp:+14155238886" />
-                    </Field>
-                    <Field label="Webhook Secret" hint="Para validar firma de requests entrantes">
-                      <Input value={cfg.canales.whatsapp.webhookSecret ?? ""} onChange={v => setWhatsApp("webhookSecret", v)} placeholder="secreto" type="password" />
-                    </Field>
+                    <Field label="Account SID"><Input value={cfg.canales.whatsapp.accountSid ?? ""} onChange={v => setWhatsApp("accountSid", v)} placeholder="ACxxxxxxxx" /></Field>
+                    <Field label="Auth Token"><Input value={cfg.canales.whatsapp.authToken ?? ""} onChange={v => setWhatsApp("authToken", v)} placeholder="xxxxxxxx" type="password" /></Field>
+                    <Field label="Número Twilio WA" hint="Formato: whatsapp:+14155238886"><Input value={cfg.canales.whatsapp.fromNumber ?? ""} onChange={v => setWhatsApp("fromNumber", v)} placeholder="whatsapp:+14155238886" /></Field>
+                    <Field label="Webhook Secret"><Input value={cfg.canales.whatsapp.webhookSecret ?? ""} onChange={v => setWhatsApp("webhookSecret", v)} placeholder="secreto" type="password" /></Field>
                   </>
                 )}
-
-                <Field label="WhatsApp de Suplencias (coordinación interna)" hint="Número del coordinador al que los médicos pueden responder">
+                <Field label="WhatsApp de coordinación" hint="Número del coordinador para respuestas rápidas">
                   <Input value={cfg.organizacion.whatsappSuplencias} onChange={v => setOrg("whatsappSuplencias", v)} placeholder="+598XXXXXXXX" />
                 </Field>
               </>
             )}
           </div>
 
-          {/* SMS */}
-          <div style={sectionStyle}>
-            <CanalHeader
-              canal="SMS"
-              enabled={cfg.canales.sms.enabled}
-              onToggle={v => setSms("enabled", v)}
-              rgb={CANAL_META.SMS.rgb}
-            />
-
-            {cfg.canales.sms.enabled && (
-              <>
-                <div style={infoBoxStyle}>
-                  Requiere backend para enviar SMS y recibir respuestas por webhook.
-                  El médico responde con "1" (acepto) o "2" (rechazo) y el sistema actualiza la convocatoria automáticamente.
-                </div>
-                <Field label="Proveedor">
-                  <Select
-                    value={cfg.canales.sms.provider}
-                    onChange={v => setSms("provider", v as SmsProvider)}
-                    options={[
-                      { value: "TWILIO",        label: "Twilio SMS" },
-                      { value: "SMSMASSIVOS_UY", label: "SMSMasivos.uy (Uruguay)" },
-                      { value: "AWS_SNS",        label: "AWS SNS" },
-                    ]}
-                  />
-                </Field>
-
-                {(cfg.canales.sms.provider === "TWILIO") && (
-                  <>
-                    <Field label="Account SID">
-                      <Input value={cfg.canales.sms.accountSid ?? ""} onChange={v => setSms("accountSid", v)} placeholder="ACxxxxxxxx" />
-                    </Field>
-                    <Field label="Auth Token">
-                      <Input value={cfg.canales.sms.authToken ?? ""} onChange={v => setSms("authToken", v)} placeholder="xxxxxxxx" type="password" />
-                    </Field>
-                    <Field label="Número remitente">
-                      <Input value={cfg.canales.sms.fromNumber ?? ""} onChange={v => setSms("fromNumber", v)} placeholder="+15551234567" />
-                    </Field>
-                    <Field label="Webhook Secret" hint="Para validar firma de Twilio en requests entrantes">
-                      <Input value={cfg.canales.sms.webhookSecret ?? ""} onChange={v => setSms("webhookSecret", v)} placeholder="secreto" type="password" />
-                    </Field>
-                  </>
-                )}
-
-                {cfg.canales.sms.provider === "SMSMASSIVOS_UY" && (
-                  <>
-                    <Field label="API Key / Token">
-                      <Input value={cfg.canales.sms.authToken ?? ""} onChange={v => setSms("authToken", v)} placeholder="token de SMSMasivos" type="password" />
-                    </Field>
-                    <Field label="Número remitente o nombre alfanumérico">
-                      <Input value={cfg.canales.sms.fromNumber ?? ""} onChange={v => setSms("fromNumber", v)} placeholder="MEDIFLOW" />
-                    </Field>
-                  </>
-                )}
-
-                {cfg.canales.sms.provider === "AWS_SNS" && (
-                  <>
-                    <Field label="AWS Region">
-                      <Input value={cfg.canales.sms.awsRegion ?? ""} onChange={v => setSms("awsRegion", v)} placeholder="us-east-1" />
-                    </Field>
-                    <Field label="AWS Access Key ID">
-                      <Input value={cfg.canales.sms.awsAccessKey ?? ""} onChange={v => setSms("awsAccessKey", v)} placeholder="AKIAIOSFODNN7EXAMPLE" />
-                    </Field>
-                    <Field label="AWS Secret Access Key">
-                      <Input value={cfg.canales.sms.awsSecretKey ?? ""} onChange={v => setSms("awsSecretKey", v)} placeholder="xxxxxxxx" type="password" />
-                    </Field>
-                  </>
-                )}
-
-                <div style={{ ...infoBoxStyle, marginTop: 8 }}>
-                  <b>Plantilla de mensaje SMS:</b><br />
-                  <code style={{ fontSize: 12, fontFamily: "monospace" }}>
-                    "Hola Dr. [NOMBRE]. Turno en [SECTOR] el [FECHA] [HORA_INICIO] a [HORA_FIN] en [SEDE]. Responda 1=ACEPTO 2=RECHAZO. Mediflow"
-                  </code>
-                </div>
-              </>
-            )}
-          </div>
-
           {/* Email */}
           <div style={sectionStyle}>
-            <CanalHeader
-              canal="Email"
-              enabled={cfg.canales.email.enabled}
-              onToggle={v => setEmail("enabled", v)}
-              rgb={CANAL_META.EMAIL.rgb}
-            />
-
+            <CanalHeader canal="Email" enabled={cfg.canales.email.enabled}
+              onToggle={v => setEmail("enabled", v)} rgb={CANAL_META.EMAIL.rgb} />
             {cfg.canales.email.enabled && (
               <>
                 <div style={infoBoxStyle}>
-                  Requiere backend. El médico recibirá un email con botones de "Aceptar" / "Rechazar" que actualizan la convocatoria al hacer clic.
+                  Requiere backend. El médico recibirá un email con botones de "Aceptar" / "Rechazar".
                 </div>
                 <Field label="Proveedor">
-                  <Select
-                    value={cfg.canales.email.provider}
+                  <Select value={cfg.canales.email.provider}
                     onChange={v => setEmail("provider", v as EmailProvider)}
                     options={[
-                      { value: "SENDGRID",  label: "SendGrid" },
-                      { value: "RESEND",    label: "Resend" },
-                      { value: "SMTP",      label: "SMTP (servidor propio)" },
-                      { value: "AWS_SES",   label: "AWS SES" },
-                    ]}
-                  />
+                      { value: "SENDGRID", label: "SendGrid" },
+                      { value: "RESEND",   label: "Resend" },
+                      { value: "SMTP",     label: "SMTP (servidor propio)" },
+                      { value: "AWS_SES",  label: "AWS SES" },
+                    ]} />
                 </Field>
-                <Field label="Email remitente">
-                  <Input value={cfg.canales.email.fromEmail ?? ""} onChange={v => setEmail("fromEmail", v)} placeholder="suplencias@miorganizacion.com" type="email" />
-                </Field>
-                <Field label="Nombre remitente">
-                  <Input value={cfg.canales.email.fromName ?? ""} onChange={v => setEmail("fromName", v)} placeholder="Suplencias Médicas" />
-                </Field>
-
+                <Field label="Email remitente"><Input value={cfg.canales.email.fromEmail ?? ""} onChange={v => setEmail("fromEmail", v)} placeholder="suplencias@org.com" type="email" /></Field>
+                <Field label="Nombre remitente"><Input value={cfg.canales.email.fromName ?? ""} onChange={v => setEmail("fromName", v)} placeholder="Suplencias Médicas" /></Field>
                 {(cfg.canales.email.provider === "SENDGRID" || cfg.canales.email.provider === "RESEND") && (
-                  <Field label="API Key">
-                    <Input value={cfg.canales.email.apiKey ?? ""} onChange={v => setEmail("apiKey", v)} placeholder="SG.xxxxxxx / re_xxxxxxx" type="password" />
-                  </Field>
+                  <Field label="API Key"><Input value={cfg.canales.email.apiKey ?? ""} onChange={v => setEmail("apiKey", v)} placeholder="SG.xxx / re_xxx" type="password" /></Field>
                 )}
-
                 {cfg.canales.email.provider === "SMTP" && (
                   <>
-                    <Field label="Servidor SMTP">
-                      <Input value={cfg.canales.email.smtpHost ?? ""} onChange={v => setEmail("smtpHost", v)} placeholder="smtp.gmail.com" />
-                    </Field>
-                    <Field label="Puerto">
-                      <Input value={String(cfg.canales.email.smtpPort ?? 587)} onChange={v => setEmail("smtpPort", Number(v))} placeholder="587" type="number" />
-                    </Field>
-                    <Field label="Usuario SMTP">
-                      <Input value={cfg.canales.email.smtpUser ?? ""} onChange={v => setEmail("smtpUser", v)} placeholder="usuario@gmail.com" />
-                    </Field>
-                    <Field label="Contraseña SMTP">
-                      <Input value={cfg.canales.email.smtpPass ?? ""} onChange={v => setEmail("smtpPass", v)} placeholder="contraseña" type="password" />
-                    </Field>
+                    <Field label="Servidor SMTP"><Input value={cfg.canales.email.smtpHost ?? ""} onChange={v => setEmail("smtpHost", v)} placeholder="smtp.gmail.com" /></Field>
+                    <Field label="Puerto"><Input value={String(cfg.canales.email.smtpPort ?? 587)} onChange={v => setEmail("smtpPort", Number(v))} placeholder="587" type="number" /></Field>
+                    <Field label="Usuario SMTP"><Input value={cfg.canales.email.smtpUser ?? ""} onChange={v => setEmail("smtpUser", v)} placeholder="usuario@gmail.com" /></Field>
+                    <Field label="Contraseña SMTP"><Input value={cfg.canales.email.smtpPass ?? ""} onChange={v => setEmail("smtpPass", v)} placeholder="contraseña" type="password" /></Field>
                   </>
                 )}
-
                 {cfg.canales.email.provider === "AWS_SES" && (
                   <>
-                    <Field label="AWS Region">
-                      <Input value={cfg.canales.email.awsRegion ?? ""} onChange={v => setEmail("awsRegion", v)} placeholder="us-east-1" />
-                    </Field>
-                    <Field label="AWS Access Key ID">
-                      <Input value={cfg.canales.email.awsAccessKey ?? ""} onChange={v => setEmail("awsAccessKey", v)} placeholder="AKIAIOSFODNN7EXAMPLE" />
-                    </Field>
-                    <Field label="AWS Secret Access Key">
-                      <Input value={cfg.canales.email.awsSecretKey ?? ""} onChange={v => setEmail("awsSecretKey", v)} placeholder="xxxxxxxx" type="password" />
-                    </Field>
+                    <Field label="AWS Region"><Input value={cfg.canales.email.awsRegion ?? ""} onChange={v => setEmail("awsRegion", v)} placeholder="us-east-1" /></Field>
+                    <Field label="AWS Access Key ID"><Input value={cfg.canales.email.awsAccessKey ?? ""} onChange={v => setEmail("awsAccessKey", v)} placeholder="AKIAIOSFODNN7EXAMPLE" /></Field>
+                    <Field label="AWS Secret Access Key"><Input value={cfg.canales.email.awsSecretKey ?? ""} onChange={v => setEmail("awsSecretKey", v)} placeholder="xxxxxxxx" type="password" /></Field>
                   </>
                 )}
               </>
@@ -475,12 +340,9 @@ export function ConfigPage() {
 
           {/* App */}
           <div style={sectionStyle}>
-            <CanalHeader
-              canal="App (portal web)"
-              enabled={cfg.canales.app.enabled}
+            <CanalHeader canal="App (portal web)" enabled={cfg.canales.app.enabled}
               onToggle={v => setCfg(c => ({ ...c, canales: { ...c.canales, app: { enabled: v } } }))}
-              rgb={CANAL_META.APP.rgb}
-            />
+              rgb={CANAL_META.APP.rgb} />
             {!cfg.canales.app.enabled && (
               <div style={{ ...infoBoxStyle, borderColor: "rgba(220,38,38,0.2)", color: "var(--danger)", background: "rgba(220,38,38,0.05)" }}>
                 Si deshabilitás la App, los médicos no podrán ver convocatorias en el portal web.
@@ -659,9 +521,9 @@ export function ConfigPage() {
             <p style={{ margin: "0 0 6px", fontSize: 13, fontWeight: 700, color: "var(--text)" }}>Accesos demo activos</p>
             <div style={{ display: "grid", gap: 4, fontSize: 12.5, color: "var(--muted)" }}>
               <div><b style={{ color: "var(--text)" }}>9999</b> → Super Admin</div>
-              <div><b style={{ color: "var(--text)" }}>2001</b> → Administrador</div>
               <div><b style={{ color: "var(--text)" }}>1001</b> → Coordinador</div>
-              <div><b style={{ color: "var(--muted)" }}>cualquier médico del catálogo</b> → Médico</div>
+              <div><b style={{ color: "var(--text)" }}>5001</b> → Médico (demo)</div>
+              <div><b style={{ color: "var(--text)" }}>3001</b> → Consulta PD</div>
             </div>
             <p style={{ margin: "10px 0 0", fontSize: 11.5, color: "var(--subtle)" }}>
               Los accesos demo son fijos en esta versión (frontend-only). En la versión con backend, se gestionarán desde Usuarios.

@@ -26,9 +26,10 @@ export const router = createBrowserRouter([
   { path: "/dashboard/nueva",            element: auth("coord", <NuevaConvocatoria />)   },
   { path: "/dashboard/c/:id",            element: auth("coord", <DetalleConvocatoria />) },
   { path: "/dashboard/reportes/horas",   element: auth("coord", <ReporteHoras />)        },
-  { path: "/parte-diario",               element: <RequireAuth><RequireRole roles={["COORDINADOR","ADMIN","SUPER_ADMIN","CONSULTA_PD"]}><ParteDiario /></RequireRole></RequireAuth> },
+  { path: "/parte-diario",               element: <RequireAuth><RequireRole roles={["COORDINADOR","SUPER_ADMIN","CONSULTA_PD","MEDICO"]}><ParteDiario /></RequireRole></RequireAuth> },
   { path: "/admin",                      element: auth("coord", <AdminDashboard />)       },
-  { path: "/config",                     element: auth("admin", <ConfigPage />)            },
+  { path: "/config",                     element: auth("coord", <ConfigPage />)            },
+  { path: "/medico",                     element: <RequireAuth><RequireRole roles={["MEDICO","SUPER_ADMIN"]}><Navigate to="/parte-diario" replace /></RequireRole></RequireAuth> },
 
   // ── Redirects legacy ─────────────────────────────────────────────────
   { path: "/suplencias",                element: <Navigate to="/dashboard" replace /> },

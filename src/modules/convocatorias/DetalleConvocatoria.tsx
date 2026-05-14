@@ -114,6 +114,9 @@ export function DetalleConvocatoria() {
     a => a.estado === "CONFIRMADA" || a.estado === "CUMPLIDA"
   ).length;
 
+  const aceptadosCount = (c.invitaciones || []).filter(i => i.estado === "ACEPTO").length;
+  const cuposCompletos = aceptadosCount >= c.cupos;
+
   const cancelada = c.estado === "CANCELADA";
 
   // ── Generador de mensaje WA ──────────────────────────────────────────────
@@ -279,14 +282,26 @@ export function DetalleConvocatoria() {
 
         {/* ── Panel de Despacho ── */}
         <div style={panelStyle}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
             <h3 style={{ ...h3Style, margin: 0 }}>Panel de Despacho</h3>
             <span style={{ fontSize: 12, color: "var(--muted)" }}>
-              {(c.invitaciones || []).filter(i => i.estado === "ACEPTO").length} aceptaron ·{" "}
+              {aceptadosCount} aceptaron ·{" "}
               {(c.invitaciones || []).filter(i => i.estado === "RECHAZO" || i.estado === "SIN_RESPUESTA").length} rechazaron/sin resp. ·{" "}
               {(c.invitaciones || []).filter(i => i.estado === "ENVIADA").length} pendientes
             </span>
           </div>
+
+          {/* Banner cupos completos */}
+          {cuposCompletos && (
+            <div style={{
+              padding: "8px 14px", borderRadius: 9, marginBottom: 12,
+              background: "rgba(22,163,74,0.10)", border: "1px solid rgba(22,163,74,0.35)",
+              fontSize: 13, fontWeight: 700, color: "rgb(15,118,55)",
+              display: "flex", alignItems: "center", gap: 8,
+            }}>
+              ✓ Cupos completos ({aceptadosCount}/{c.cupos}) — Para cambiar, marcá a alguien como Rechazó o Sin resp.
+            </div>
+          )}
 
           {(c.invitaciones || []).length === 0 && (
             <p style={{ color: "var(--muted)", fontSize: 13 }}>No hay médicos en esta convocatoria.</p>
@@ -300,18 +315,20 @@ export function DetalleConvocatoria() {
               const tel = md.telefono;
               const waMsg = buildWaMsg(md.nombre);
               const estado = inv.estado as string;
+              const dimmed = cuposCompletos && estado !== "ACEPTO";
 
               return (
                 <div key={inv.medicoId} style={{
                   borderRadius: 12, border: `1px solid var(--border-2)`,
-                  borderLeft: `3.5px solid rgb(${rgb})`,
+                  borderLeft: `3.5px solid ${estado === "ACEPTO" ? "rgb(22,163,74)" : `rgb(${rgb})`}`,
                   background: estado === "ACEPTO"
-                    ? "rgba(22,163,74,0.04)"
+                    ? "rgba(22,163,74,0.07)"
                     : estado === "RECHAZO" || estado === "SIN_RESPUESTA"
                     ? "rgba(100,116,139,0.04)"
                     : "var(--surface-2)",
                   padding: "12px 14px",
-                  transition: "all 0.12s",
+                  opacity: dimmed ? 0.45 : 1,
+                  transition: "opacity 0.20s, background 0.12s",
                 }}>
                   {/* Fila superior: nombre + estado + WA */}
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "space-between" }}>
@@ -365,6 +382,7 @@ export function DetalleConvocatoria() {
                     <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
                       {(["ENVIADA", "ACEPTO", "RECHAZO", "SIN_RESPUESTA"] as const).map(s => {
                         const active = estado === s;
+                        const bloqueado = s === "ACEPTO" && cuposCompletos && estado !== "ACEPTO";
                         const styles: Record<string, { bg: string; color: string; border: string; label: string }> = {
                           ENVIADA:       { bg: "rgba(59,130,246,.12)",  color: "rgb(29,78,216)",  border: "rgba(59,130,246,.40)",  label: "Notificado" },
                           ACEPTO:        { bg: "rgba(22,163,74,.12)",   color: "rgb(15,118,55)",  border: "rgba(22,163,74,.40)",   label: "Aceptó" },
@@ -375,13 +393,17 @@ export function DetalleConvocatoria() {
                         return (
                           <button
                             key={s}
-                            onClick={() => setInv(inv.medicoId, s)}
+                            onClick={() => !bloqueado && setInv(inv.medicoId, s)}
+                            disabled={bloqueado}
+                            title={bloqueado ? "Cupos completos — liberá un cupo primero" : undefined}
                             style={{
                               padding: "5px 12px", borderRadius: 7, fontSize: 12, fontWeight: active ? 700 : 500,
                               border: `1.5px solid ${active ? st.border : "var(--border-2)"}`,
                               background: active ? st.bg : "var(--surface)",
                               color: active ? st.color : "var(--muted)",
-                              cursor: "pointer", transition: "all 0.12s",
+                              cursor: bloqueado ? "not-allowed" : "pointer",
+                              opacity: bloqueado ? 0.4 : 1,
+                              transition: "all 0.12s",
                             }}
                           >{st.label} {active ? "✓" : ""}</button>
                         );

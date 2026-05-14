@@ -22,19 +22,19 @@ export function RequireRole({ roles, children }: { roles: Role | Role[]; childre
   return <>{children}</>;
 }
 
-// Shorthand para rutas de coordinación (COORDINADOR, ADMIN, SUPER_ADMIN)
+// Shorthand para rutas de coordinación (COORDINADOR, SUPER_ADMIN)
 export function RequireCoord({ children }: { children: React.ReactNode }) {
   return (
-    <RequireRole roles={["COORDINADOR", "ADMIN", "SUPER_ADMIN"]}>
+    <RequireRole roles={["COORDINADOR", "SUPER_ADMIN"]}>
       {children}
     </RequireRole>
   );
 }
 
-// Shorthand para rutas de administración (ADMIN, SUPER_ADMIN)
+// Shorthand para rutas de super-admin exclusivas
 export function RequireAdmin({ children }: { children: React.ReactNode }) {
   return (
-    <RequireRole roles={["ADMIN", "SUPER_ADMIN"]}>
+    <RequireRole roles={["SUPER_ADMIN"]}>
       {children}
     </RequireRole>
   );
