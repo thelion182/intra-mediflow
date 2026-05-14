@@ -70,8 +70,17 @@ export function DetalleConvocatoria() {
   const [editMode, setEditMode] = useState(false);
   const [cancelConfirm, setCancelConfirm] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [filterEstado, setFilterEstado] = useState<string>("TODOS");
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const c = useMemo(() => (id ? convocatoriaStore.get(id) : null), [id, tick]);
+
+  const filteredInvitaciones = useMemo(() => {
+    const invs = (c?.invitaciones ?? []) as any[];
+    if (filterEstado === "TODOS") return invs;
+    return invs.filter(i => i.estado === filterEstado);
+  }, [c, filterEstado]);
 
   const medicosSnap = useMemo(() => getMedicosCatalogo(), [tick]);
   const medicosFull = useMemo(() => medicosStore.list(), [tick]);
@@ -170,6 +179,45 @@ export function DetalleConvocatoria() {
 
   function setInv(medicoId: string, estado: "ENVIADA" | "ACEPTO" | "RECHAZO" | "SIN_RESPUESTA") {
     convocatoriaStore.setInvManual(c.id, medicoId, estado);
+    setSelectedIds(new Set());
+    setTick(t => t + 1);
+  }
+
+  // ── Sequential helpers ────────────────────────────────────────────────────
+  const isSeq = c.modoEnvio === "SECUENCIAL";
+  const activeInv = isSeq ? (c.invitaciones || []).find((i: any) => i.estado === "ENVIADA") : null;
+  const queueCount = isSeq ? (c.invitaciones || []).filter((i: any) => i.estado === "EN_ESPERA").length : 0;
+
+  // ── WA "cubierto por otro" ────────────────────────────────────────────────
+  function buildWaMsgCubierto(medicoNombre: string) {
+    const inst = cfg.organizacion.nombre || "INTRA MediFlow";
+    const sector = c.sector + (c.sede ? ` · ${c.sede}` : "");
+    return (
+      `*${inst}*\n` +
+      `Dr./Dra. *${medicoNombre}*, la guardia de *${sector}* (${fmt(c.inicio)}) ya fue cubierta por otro colega.\n` +
+      `Muchas gracias por tu disponibilidad.`
+    );
+  }
+
+  // ── Bulk helpers ──────────────────────────────────────────────────────────
+  function toggleSelect(medicoId: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(medicoId)) next.delete(medicoId); else next.add(medicoId);
+      return next;
+    });
+  }
+
+  function selectAllVisible(checked: boolean) {
+    if (!checked) { setSelectedIds(new Set()); return; }
+    setSelectedIds(new Set(filteredInvitaciones.map((i: any) => i.medicoId)));
+  }
+
+  function bulkApply(estado: "ENVIADA" | "ACEPTO" | "RECHAZO" | "SIN_RESPUESTA") {
+    for (const mid of Array.from(selectedIds)) {
+      convocatoriaStore.setInvManual(c.id, mid, estado);
+    }
+    setSelectedIds(new Set());
     setTick(t => t + 1);
   }
 
@@ -282,12 +330,23 @@ export function DetalleConvocatoria() {
 
         {/* ── Panel de Despacho ── */}
         <div style={panelStyle}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-            <h3 style={{ ...h3Style, margin: 0 }}>Panel de Despacho</h3>
+          {/* Header */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <h3 style={{ ...h3Style, margin: 0 }}>Panel de Despacho</h3>
+              {isSeq && (
+                <span style={{
+                  padding: "2px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700,
+                  background: "rgba(99,102,241,0.12)", color: "rgb(67,56,202)",
+                  border: "1px solid rgba(99,102,241,0.30)",
+                }}>SECUENCIAL</span>
+              )}
+            </div>
             <span style={{ fontSize: 12, color: "var(--muted)" }}>
               {aceptadosCount} aceptaron ·{" "}
-              {(c.invitaciones || []).filter(i => i.estado === "RECHAZO" || i.estado === "SIN_RESPUESTA").length} rechazaron/sin resp. ·{" "}
-              {(c.invitaciones || []).filter(i => i.estado === "ENVIADA").length} pendientes
+              {(c.invitaciones || []).filter((i: any) => i.estado === "RECHAZO" || i.estado === "SIN_RESPUESTA").length} rechazo/sin resp. ·{" "}
+              {(c.invitaciones || []).filter((i: any) => i.estado === "ENVIADA").length} pendientes
+              {isSeq && queueCount > 0 && ` · ${queueCount} en cola`}
             </span>
           </div>
 
@@ -303,12 +362,169 @@ export function DetalleConvocatoria() {
             </div>
           )}
 
+          {/* Turno actual (solo modo SECUENCIAL) */}
+          {isSeq && activeInv && (() => {
+            const activeMd = medicoData(activeInv.medicoId);
+            const activeWaMsg = buildWaMsg(activeMd.nombre);
+            const activeTel = activeMd.telefono;
+            return (
+              <div style={{
+                padding: "14px 16px", borderRadius: 12, marginBottom: 14,
+                background: "rgba(99,102,241,0.07)", border: "1.5px solid rgba(99,102,241,0.30)",
+              }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "rgb(67,56,202)", marginBottom: 6, textTransform: "uppercase", letterSpacing: ".04em" }}>
+                  Turno actual
+                </div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text)" }}>{activeMd.nombre}</div>
+                    {activeMd.especialidad && <div style={{ fontSize: 12, color: "var(--muted)" }}>{activeMd.especialidad}</div>}
+                    {activeTel
+                      ? <div style={{ fontSize: 11.5, color: "var(--subtle)", marginTop: 2 }}>📞 {activeTel}</div>
+                      : <div style={{ fontSize: 11.5, color: "rgb(185,28,28)", marginTop: 2 }}>Sin teléfono</div>
+                    }
+                  </div>
+                  <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+                    {activeTel && (
+                      <a
+                        href={waLink(activeTel, activeWaMsg)}
+                        target="_blank" rel="noreferrer"
+                        style={{
+                          display: "inline-flex", alignItems: "center", gap: 5,
+                          padding: "7px 16px", borderRadius: 8, fontSize: 13, fontWeight: 700,
+                          background: "rgba(37,211,102,0.15)", color: "rgb(18,130,60)",
+                          border: "1.5px solid rgba(37,211,102,0.45)", textDecoration: "none",
+                        }}
+                      >📱 Enviar WA</a>
+                    )}
+                    {(["ACEPTO", "RECHAZO", "SIN_RESPUESTA"] as const).map(s => {
+                      const stMap = {
+                        ACEPTO:        { bg: "rgba(22,163,74,.14)",  color: "rgb(15,118,55)",  border: "rgba(22,163,74,.50)",  label: "Aceptó" },
+                        RECHAZO:       { bg: "rgba(220,38,38,.12)",  color: "rgb(185,28,28)", border: "rgba(220,38,38,.45)", label: "Rechazó" },
+                        SIN_RESPUESTA: { bg: "rgba(217,119,6,.12)",  color: "rgb(161,85,4)",  border: "rgba(217,119,6,.45)", label: "Sin resp." },
+                      };
+                      const st = stMap[s];
+                      const bloqueado = s === "ACEPTO" && cuposCompletos;
+                      return (
+                        <button
+                          key={s}
+                          onClick={() => !bloqueado && setInv(activeInv.medicoId, s)}
+                          disabled={bloqueado}
+                          style={{
+                            padding: "7px 14px", borderRadius: 8, fontSize: 12.5, fontWeight: 700,
+                            border: `1.5px solid ${st.border}`, background: st.bg, color: st.color,
+                            cursor: bloqueado ? "not-allowed" : "pointer", opacity: bloqueado ? 0.4 : 1,
+                          }}
+                        >{st.label}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+                {queueCount > 0 && (
+                  <div style={{ fontSize: 12, color: "rgb(67,56,202)", marginTop: 8, opacity: 0.75 }}>
+                    {queueCount} médico{queueCount !== 1 ? "s" : ""} en cola — avanzan al marcar la respuesta
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Filtros + Selección masiva */}
+          {(c.invitaciones || []).length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+              {(["TODOS", "ENVIADA", "EN_ESPERA", "ACEPTO", "RECHAZO", "SIN_RESPUESTA"] as const).map(f => {
+                const count = f === "TODOS"
+                  ? (c.invitaciones || []).length
+                  : (c.invitaciones || []).filter((i: any) => i.estado === f).length;
+                const labelMap: Record<string, string> = {
+                  TODOS: "Todos", ENVIADA: "Notificado", EN_ESPERA: "En espera",
+                  ACEPTO: "Aceptaron", RECHAZO: "Rechazaron", SIN_RESPUESTA: "Sin resp.",
+                };
+                const active = filterEstado === f;
+                return (
+                  <button
+                    key={f}
+                    onClick={() => { setFilterEstado(f); setSelectedIds(new Set()); }}
+                    style={{
+                      padding: "4px 11px", borderRadius: 20, fontSize: 11.5, fontWeight: active ? 700 : 500,
+                      border: `1.5px solid ${active ? "var(--blue)" : "var(--border-2)"}`,
+                      background: active ? "rgba(59,130,246,0.10)" : "var(--surface-2)",
+                      color: active ? "var(--blue)" : "var(--muted)",
+                      cursor: "pointer",
+                    }}
+                  >{labelMap[f]} {count > 0 && <span style={{ opacity: 0.7 }}>({count})</span>}</button>
+                );
+              })}
+              <div style={{ marginLeft: "auto" }}>
+                <button
+                  onClick={() => { setBulkMode(v => !v); setSelectedIds(new Set()); }}
+                  style={{
+                    padding: "4px 11px", borderRadius: 20, fontSize: 11.5, fontWeight: bulkMode ? 700 : 500,
+                    border: `1.5px solid ${bulkMode ? "rgba(217,119,6,.50)" : "var(--border-2)"}`,
+                    background: bulkMode ? "rgba(217,119,6,0.10)" : "var(--surface-2)",
+                    color: bulkMode ? "rgb(161,85,4)" : "var(--muted)", cursor: "pointer",
+                  }}
+                >☑ Selección masiva</button>
+              </div>
+            </div>
+          )}
+
+          {/* Barra de acción masiva */}
+          {bulkMode && selectedIds.size > 0 && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+              padding: "10px 14px", borderRadius: 10, marginBottom: 12,
+              background: "rgba(217,119,6,0.07)", border: "1px solid rgba(217,119,6,0.30)",
+            }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "rgb(161,85,4)" }}>
+                <input
+                  type="checkbox"
+                  checked={selectedIds.size === filteredInvitaciones.length && filteredInvitaciones.length > 0}
+                  onChange={e => selectAllVisible(e.target.checked)}
+                />
+                {selectedIds.size} seleccionado{selectedIds.size !== 1 ? "s" : ""}
+              </label>
+              <span style={{ fontSize: 12, color: "var(--muted)" }}>Cambiar a:</span>
+              {(["ENVIADA", "ACEPTO", "RECHAZO", "SIN_RESPUESTA"] as const).map(s => {
+                const stMap = {
+                  ENVIADA:       { color: "rgb(29,78,216)",  label: "Notificado" },
+                  ACEPTO:        { color: "rgb(15,118,55)",  label: "Aceptó" },
+                  RECHAZO:       { color: "rgb(185,28,28)", label: "Rechazó" },
+                  SIN_RESPUESTA: { color: "rgb(161,85,4)",  label: "Sin resp." },
+                };
+                const st = stMap[s];
+                return (
+                  <button
+                    key={s}
+                    onClick={() => bulkApply(s)}
+                    style={{
+                      padding: "4px 12px", borderRadius: 7, fontSize: 12, fontWeight: 600,
+                      border: "1px solid var(--border-2)", background: "var(--surface)",
+                      color: st.color, cursor: "pointer",
+                    }}
+                  >{st.label}</button>
+                );
+              })}
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                style={{
+                  padding: "4px 10px", borderRadius: 7, fontSize: 11.5, fontWeight: 500,
+                  border: "1px solid var(--border-2)", background: "transparent",
+                  color: "var(--muted)", cursor: "pointer", marginLeft: "auto",
+                }}
+              >Deseleccionar</button>
+            </div>
+          )}
+
+          {filteredInvitaciones.length === 0 && (c.invitaciones || []).length > 0 && (
+            <p style={{ color: "var(--muted)", fontSize: 13 }}>Ningún médico con ese filtro.</p>
+          )}
           {(c.invitaciones || []).length === 0 && (
             <p style={{ color: "var(--muted)", fontSize: 13 }}>No hay médicos en esta convocatoria.</p>
           )}
 
           <div style={{ display: "grid", gap: 10 }}>
-            {(c.invitaciones || []).map((inv: any, idx: number) => {
+            {filteredInvitaciones.map((inv: any, idx: number) => {
               const md = medicoData(inv.medicoId);
               const rgb = TIPO_RGB[md.tipo] ?? "100,116,139";
               const icono = iconosEsp[md.especialidad] ?? "";
@@ -316,26 +532,50 @@ export function DetalleConvocatoria() {
               const waMsg = buildWaMsg(md.nombre);
               const estado = inv.estado as string;
               const dimmed = cuposCompletos && estado !== "ACEPTO";
+              const isActive = isSeq && estado === "ENVIADA";
+              const isInQueue = isSeq && estado === "EN_ESPERA";
+              const isSelected = selectedIds.has(inv.medicoId);
+              const showCubiertoPorOtro = cuposCompletos && (estado === "ENVIADA" || estado === "EN_ESPERA") && tel && !cancelada;
 
               return (
                 <div key={inv.medicoId} style={{
-                  borderRadius: 12, border: `1px solid var(--border-2)`,
-                  borderLeft: `3.5px solid ${estado === "ACEPTO" ? "rgb(22,163,74)" : `rgb(${rgb})`}`,
-                  background: estado === "ACEPTO"
-                    ? "rgba(22,163,74,0.07)"
-                    : estado === "RECHAZO" || estado === "SIN_RESPUESTA"
-                    ? "rgba(100,116,139,0.04)"
+                  borderRadius: 12, border: `1px solid ${isSelected ? "rgba(217,119,6,0.50)" : "var(--border-2)"}`,
+                  borderLeft: `3.5px solid ${
+                    isActive ? "rgb(99,102,241)"
+                    : estado === "ACEPTO" ? "rgb(22,163,74)"
+                    : isInQueue ? "rgb(100,116,139)"
+                    : `rgb(${rgb})`
+                  }`,
+                  background: isSelected
+                    ? "rgba(217,119,6,0.06)"
+                    : isActive ? "rgba(99,102,241,0.05)"
+                    : estado === "ACEPTO" ? "rgba(22,163,74,0.07)"
+                    : estado === "RECHAZO" || estado === "SIN_RESPUESTA" ? "rgba(100,116,139,0.04)"
                     : "var(--surface-2)",
                   padding: "12px 14px",
-                  opacity: dimmed ? 0.45 : 1,
+                  opacity: !isSelected && dimmed ? 0.45 : 1,
                   transition: "opacity 0.20s, background 0.12s",
                 }}>
-                  {/* Fila superior: nombre + estado + WA */}
+                  {/* Fila superior */}
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "space-between" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      {bulkMode && (
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelect(inv.medicoId)}
+                          style={{ width: 16, height: 16, cursor: "pointer", accentColor: "rgb(161,85,4)" }}
+                        />
+                      )}
                       <span style={{ fontWeight: 700, fontSize: 13.5, color: "var(--text)" }}>
                         {idx + 1}. {md.nombre}
                       </span>
+                      {isInQueue && (
+                        <span style={{ fontSize: 10.5, fontWeight: 700, padding: "1px 7px", borderRadius: 20,
+                          background: "rgba(100,116,139,0.12)", color: "rgb(71,85,105)", border: "1px solid rgba(100,116,139,0.22)" }}>
+                          En cola
+                        </span>
+                      )}
                       {md.especialidad && (
                         <span style={{ fontSize: 12, color: "var(--muted)" }}>
                           {icono ? `${icono} ` : ""}{md.especialidad}
@@ -351,17 +591,17 @@ export function DetalleConvocatoria() {
                       }
                     </div>
 
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       <span style={{
                         padding: "3px 10px", borderRadius: 20, fontSize: 11.5, fontWeight: 700,
                         ...estadoBadgeStyle(estado),
                       }}>{estadoLabel(estado)}</span>
 
-                      {tel && !cancelada && (
+                      {/* WA invitación (siempre visible si tiene tel, excepto cancelada) */}
+                      {tel && !cancelada && !isInQueue && (
                         <a
                           href={waLink(tel, waMsg)}
-                          target="_blank"
-                          rel="noreferrer"
+                          target="_blank" rel="noreferrer"
                           title="Enviar invitación por WhatsApp"
                           style={{
                             display: "inline-flex", alignItems: "center", gap: 5,
@@ -370,15 +610,28 @@ export function DetalleConvocatoria() {
                             border: "1.5px solid rgba(37,211,102,0.40)", textDecoration: "none",
                             transition: "all 0.12s",
                           }}
-                        >
-                          📱 WA
-                        </a>
+                        >📱 WA</a>
+                      )}
+
+                      {/* WA "cubierto por otro" */}
+                      {showCubiertoPorOtro && (
+                        <a
+                          href={waLink(tel, buildWaMsgCubierto(md.nombre))}
+                          target="_blank" rel="noreferrer"
+                          title="Avisar al médico que la guardia fue cubierta por otro"
+                          style={{
+                            display: "inline-flex", alignItems: "center", gap: 5,
+                            padding: "6px 13px", borderRadius: 8, fontSize: 12, fontWeight: 700,
+                            background: "rgba(220,38,38,0.08)", color: "rgb(185,28,28)",
+                            border: "1.5px solid rgba(220,38,38,0.30)", textDecoration: "none",
+                          }}
+                        >📱 Cubierto x otro</a>
                       )}
                     </div>
                   </div>
 
-                  {/* Fila inferior: botones de estado manual */}
-                  {!cancelada && (
+                  {/* Botones de estado manual (no mostrar en secuencial para el activo — ya están arriba) */}
+                  {!cancelada && !(isSeq && isActive) && (
                     <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
                       {(["ENVIADA", "ACEPTO", "RECHAZO", "SIN_RESPUESTA"] as const).map(s => {
                         const active = estado === s;

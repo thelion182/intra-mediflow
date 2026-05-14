@@ -326,21 +326,33 @@ export const convocatoriaStore = {
         const asign: Asignacion = { id: newId("A"), medicoId, estado: "CONFIRMADA", createdAt: nowIso() };
         c.asignaciones.unshift(asign);
       }
-      // Si se llenó el último cupo → auto-SIN_RESPUESTA los que siguen en ENVIADA
+      // Si se llenó el último cupo → auto-SIN_RESPUESTA los que siguen en ENVIADA o EN_ESPERA
       if (aceptados + 1 >= c.cupos) {
         for (const other of c.invitaciones) {
           if (other.medicoId === medicoId) continue;
-          if (other.estado === "ENVIADA") { other.estado = "SIN_RESPUESTA"; other.respondedAt = nowIso(); }
+          if (other.estado === "ENVIADA" || other.estado === "EN_ESPERA") {
+            other.estado = "SIN_RESPUESTA"; other.respondedAt = nowIso();
+          }
         }
       }
     } else if (nuevoEstado === "RECHAZO") {
       if (prevEstado === "ACEPTO") cancelAsig();
       inv.estado = "RECHAZO";
       inv.respondedAt = nowIso();
+      // Secuencial manual: activar siguiente en espera
+      if (c.modoEnvio === "SECUENCIAL") {
+        const next = (c.invitaciones || []).find(i => i.estado === "EN_ESPERA");
+        if (next) activateInv(next);
+      }
     } else if (nuevoEstado === "SIN_RESPUESTA") {
       if (prevEstado === "ACEPTO") cancelAsig();
       inv.estado = "SIN_RESPUESTA";
       inv.respondedAt = nowIso();
+      // Secuencial manual: activar siguiente en espera
+      if (c.modoEnvio === "SECUENCIAL") {
+        const next = (c.invitaciones || []).find(i => i.estado === "EN_ESPERA");
+        if (next) activateInv(next);
+      }
     }
 
     c.estado = computeEstado(c);

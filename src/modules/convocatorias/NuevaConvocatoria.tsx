@@ -128,6 +128,9 @@ export function NuevaConvocatoria() {
   // ── Prioridad de destinatarios ─────────────────────────────────────────
   const [prioMode, setPrioMode] = useState<PrioMode>("SCORING");
 
+  // ── Modo de envío ──────────────────────────────────────────────────────
+  const [modoEnvio, setModoEnvio] = useState<"MASIVO"|"SECUENCIAL">("MASIVO");
+
   // ── Canales de despacho ────────────────────────────────────────────────
   const [canalesSel, setCanalesSel] = useState<Canal[]>(["WHATSAPP"]);
   function toggleCanal(c: Canal) {
@@ -306,7 +309,10 @@ export function NuevaConvocatoria() {
       });
     }
 
-    const dest = maxDespacho > 0 ? destinatarios.slice(0, maxDespacho) : destinatarios;
+    // maxDespacho solo aplica en masivo; en secuencial van todos al queue
+    const dest = modoEnvio === "MASIVO" && maxDespacho > 0
+      ? destinatarios.slice(0, maxDespacho)
+      : destinatarios;
     const c = convocatoriaStore.createAndSend({
       sector:      sectorFinal,
       sede:        sedeFinal,
@@ -319,7 +325,7 @@ export function NuevaConvocatoria() {
       createdBy:   session.userId,
       destinatarios: dest,
       keepOrder:   true,
-      modoEnvio:   "MASIVO",
+      modoEnvio,
       canales:     canalesSel,
       prioMode,
     });
@@ -444,11 +450,33 @@ export function NuevaConvocatoria() {
                 </div>
               </Field>
 
-              {/* Cantidad máxima para panel de despacho */}
-              <Field label="Médicos en panel de despacho" hint="0 = todos los seleccionados. Si ponés 5, solo los primeros 5 irán al panel.">
-                <input style={inputStyle} type="number" min={0} value={maxDespacho}
-                  onChange={e => setMaxDespacho(Math.max(0, Number(e.target.value)))} />
+              {/* Modo de envío */}
+              <Field label="Modo de despacho">
+                <div style={{ display: "flex", gap: 8 }}>
+                  {([
+                    { m: "MASIVO"     as const, label: "Masivo",      desc: "Todos simultáneamente"  },
+                    { m: "SECUENCIAL" as const, label: "Secuencial",  desc: "Uno a la vez, en orden" },
+                  ]).map(({ m, label, desc }) => (
+                    <button key={m} onClick={() => setModoEnvio(m)} style={{
+                      flex: 1, padding: "9px 0", borderRadius: 9, fontSize: 12, fontWeight: 600,
+                      border: `1.5px solid ${modoEnvio === m ? "rgba(21,101,192,0.60)" : "var(--border)"}`,
+                      background: modoEnvio === m ? "rgba(21,101,192,0.10)" : "var(--surface-2)",
+                      color: modoEnvio === m ? "var(--blue)" : "var(--muted)", cursor: "pointer",
+                    }}>
+                      <div>{label}</div>
+                      <div style={{ fontSize: 10.5, fontWeight: 400, opacity: 0.75 }}>{desc}</div>
+                    </button>
+                  ))}
+                </div>
               </Field>
+
+              {/* Cantidad máxima para panel de despacho (solo masivo) */}
+              {modoEnvio === "MASIVO" && (
+                <Field label="Médicos en panel de despacho" hint="0 = todos los seleccionados. Si ponés 5, solo los primeros 5 irán al panel.">
+                  <input style={inputStyle} type="number" min={0} value={maxDespacho}
+                    onChange={e => setMaxDespacho(Math.max(0, Number(e.target.value)))} />
+                </Field>
+              )}
 
               {/* Modo de priorización */}
               <div style={{ gridColumn: "1 / -1" }}>
