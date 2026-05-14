@@ -8,15 +8,13 @@ import { NuevaConvocatoria } from "../modules/convocatorias/NuevaConvocatoria";
 import { DetalleConvocatoria } from "../modules/convocatorias/DetalleConvocatoria";
 import { ReporteHoras } from "../modules/convocatorias/ReporteHoras";
 import { AdminDashboard } from "../modules/admin/AdminDashboard";
-import { MedicoHome } from "../modules/medico/MedicoHome";
 import { ParteDiario } from "../modules/parte-diario/ParteDiario";
 import { ConfigPage } from "../modules/config/ConfigPage";
 
-function auth(role: "coord" | "admin" | "medico", element: React.ReactElement) {
+function auth(role: "coord" | "admin", element: React.ReactElement) {
   const guard =
     role === "coord"  ? <RequireCoord>{element}</RequireCoord>  :
-    role === "admin"  ? <RequireAdmin>{element}</RequireAdmin>   :
-                        <RequireRole roles="MEDICO">{element}</RequireRole>;
+                        <RequireAdmin>{element}</RequireAdmin>;
   return <RequireAuth>{guard}</RequireAuth>;
 }
 
@@ -28,12 +26,9 @@ export const router = createBrowserRouter([
   { path: "/dashboard/nueva",            element: auth("coord", <NuevaConvocatoria />)   },
   { path: "/dashboard/c/:id",            element: auth("coord", <DetalleConvocatoria />) },
   { path: "/dashboard/reportes/horas",   element: auth("coord", <ReporteHoras />)        },
-  { path: "/parte-diario",               element: <RequireAuth><RequireRole roles={["COORDINADOR","ADMIN","SUPER_ADMIN","MEDICO","CONSULTA_PD"]}><ParteDiario /></RequireRole></RequireAuth> },
+  { path: "/parte-diario",               element: <RequireAuth><RequireRole roles={["COORDINADOR","ADMIN","SUPER_ADMIN","CONSULTA_PD"]}><ParteDiario /></RequireRole></RequireAuth> },
   { path: "/admin",                      element: auth("coord", <AdminDashboard />)       },
   { path: "/config",                     element: auth("admin", <ConfigPage />)            },
-
-  // ── Médico ────────────────────────────────────────────────────────────
-  { path: "/medico", element: <RequireAuth><RequireRole roles={["MEDICO"]}><MedicoHome /></RequireRole></RequireAuth> },
 
   // ── Redirects legacy ─────────────────────────────────────────────────
   { path: "/suplencias",                element: <Navigate to="/dashboard" replace /> },

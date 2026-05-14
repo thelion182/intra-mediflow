@@ -8,8 +8,7 @@ import { CANAL_META } from "../config/config.types";
 import { authStore } from "../../auth/auth.store";
 
 // ── Constants ─────────────────────────────────────────────────────────────
-const AUTO_REFRESH_MS = 10_000;
-const UI_TICK_MS = 1_000;
+const AUTO_REFRESH_MS = 30_000;
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 function pad2(n: number) { return String(Math.max(0, Math.floor(n))).padStart(2, "0"); }
@@ -702,8 +701,7 @@ export function SuplenciasDashboard() {
   const [viewMode, setViewMode] = useState<ViewMode>(() =>
     (localStorage.getItem("mf.dash.view") as ViewMode) ?? "cards"
   );
-  const [tick, setTick]     = useState(0);
-  const [uiTick, setUiTick] = useState(0);
+  const [tick, setTick] = useState(0);
 
   function changeView(v: ViewMode) {
     setViewMode(v);
@@ -725,21 +723,6 @@ export function SuplenciasDashboard() {
     };
     const stop = () => { if (id) { window.clearInterval(id); id = null; } };
     const onVis = () => document.visibilityState === "visible" ? (setTick(t => t + 1), start()) : stop();
-    if (document.visibilityState === "visible") start();
-    document.addEventListener("visibilitychange", onVis);
-    return () => { document.removeEventListener("visibilitychange", onVis); stop(); };
-  }, []);
-
-  useEffect(() => {
-    let id: number | null = null;
-    const start = () => {
-      if (id) return;
-      id = window.setInterval(() => {
-        if (document.visibilityState === "visible") setUiTick(x => x + 1);
-      }, UI_TICK_MS);
-    };
-    const stop = () => { if (id) { window.clearInterval(id); id = null; } };
-    const onVis = () => document.visibilityState === "visible" ? start() : stop();
     if (document.visibilityState === "visible") start();
     document.addEventListener("visibilitychange", onVis);
     return () => { document.removeEventListener("visibilitychange", onVis); stop(); };
@@ -799,16 +782,6 @@ export function SuplenciasDashboard() {
     return items;
   }, [all]);
 
-  const secuencialesActivas = useMemo(() => {
-    void uiTick;
-    const out = [];
-    for (const c of all) {
-      const st = computeSecuencialStatus(c);
-      if (st) out.push({ c, st });
-    }
-    return out;
-  }, [all, uiTick]);
-
   return (
     <AppShell>
       {/* ── Header ── */}
@@ -816,7 +789,7 @@ export function SuplenciasDashboard() {
         <div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: "-0.03em" }}>Inicio</h1>
           <p style={{ margin: "3px 0 0", fontSize: 12, color: "var(--subtle)" }}>
-            Refresh cada {Math.round(AUTO_REFRESH_MS / 1000)}s · solo pestaña activa
+            Panel de convocatorias · despacho manual
           </p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -907,22 +880,6 @@ export function SuplenciasDashboard() {
             </div>
           )}
 
-          {/* Sequential live panel */}
-          {secuencialesActivas.length > 0 && (
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: "rgb(22,163,74)", animation: "pulse 2s infinite" }} />
-                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>
-                  Secuencial en vivo · {secuencialesActivas.length}
-                </span>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10 }}>
-                {secuencialesActivas.map(({ c, st }) => (
-                  <SeqCard key={c.id} c={c} st={st as any} medicoName={medicoName} nav={nav} />
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* KPI row */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>

@@ -300,7 +300,7 @@ type Zona = "todos" | "montevideo" | "interior";
 // ── ParteDiario ───────────────────────────────────────────────────────────
 export function ParteDiario() {
   const session = authStore.getSession();
-  const readonly = session?.role === "MEDICO" || session?.role === "CONSULTA_PD";
+  const readonly = session?.role === "CONSULTA_PD";
 
   const [day, setDay] = useState(todayStr);
   const [tick, setTick] = useState(0);

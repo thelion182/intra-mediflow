@@ -77,25 +77,6 @@ export const authStore = {
       if (acc.ids.includes(v)) return { ok: true, user: acc.user };
     }
 
-    // 2) Formato explícito F-xxxx / CI-xxxx → buscar en catálogo médicos
-    if (v.startsWith("F-") || v.startsWith("CI-")) {
-      const m = medicosStore.list().find(x => x.userId === v && (x.activo ?? true));
-      if (!m) return { ok: false, error: "No se encontró el usuario (o está inactivo)." };
-      return { ok: true, user: { userId: m.userId, displayName: m.displayName, role: "MEDICO", funcionario: m.funcionario, cedula: m.cedula } };
-    }
-
-    // 3) Número puro → funcionario o cédula
-    const num = onlyDigits(v);
-    if (!num) return { ok: false, error: "Ingresá solo números, o prefijo F- / CI-." };
-
-    const list = medicosStore.list().filter(m => (m.activo ?? true));
-
-    const byFunc = list.find(m => (m.funcionario || "") === num);
-    if (byFunc) return { ok: true, user: { userId: byFunc.userId, displayName: byFunc.displayName, role: "MEDICO", funcionario: byFunc.funcionario, cedula: byFunc.cedula } };
-
-    const byCi = list.find(m => (m.cedula || "") === num);
-    if (byCi) return { ok: true, user: { userId: byCi.userId, displayName: byCi.displayName, role: "MEDICO", funcionario: byCi.funcionario, cedula: byCi.cedula } };
-
-    return { ok: false, error: "No se encontró ese ID. Revisá CI/funcionario o cargalo en Administración." };
+    return { ok: false, error: "Credenciales incorrectas." };
   }
 };

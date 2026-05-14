@@ -36,10 +36,6 @@ const NAV: Record<Role, NavItem[]> = {
     { label: "Reportes",          path: "/dashboard/reportes/horas",   rgb: "217,119,6"                },
     { label: "Administración",    path: "/admin",                      rgb: "38,166,154",  dividerBefore: true },
   ],
-  MEDICO: [
-    { label: "Mis Convocatorias", path: "/medico",       rgb: "21,101,192", exact: true },
-    { label: "Parte Diario",      path: "/parte-diario", rgb: "109,191,60", dividerBefore: true },
-  ],
   CONSULTA_PD: [
     { label: "Parte Diario",      path: "/parte-diario", rgb: "109,191,60", exact: true },
   ],
@@ -49,7 +45,6 @@ const ROLE_LABEL: Record<Role, string> = {
   SUPER_ADMIN: "Super Admin",
   ADMIN:       "Administrador",
   COORDINADOR: "Coordinador",
-  MEDICO:      "Médico",
   CONSULTA_PD: "Consulta PD",
 };
 

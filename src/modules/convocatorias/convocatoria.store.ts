@@ -257,10 +257,7 @@ export const convocatoriaStore = {
     if (all.length > 0) return;
 
     const medicos = medicosStore.list().filter(m => (m.activo ?? true));
-    const ordered = sortDestinatariosByPrioridad(medicos.map(m => m.userId));
-
-    const prioridad: "NORMAL" | "ALTA" = "ALTA";
-    const autoT = defaultTimeoutsByPrioridad(prioridad);
+    const ordered = sortDestinatariosByPrioridad(medicos.map(m => m.userId)).slice(0, 8);
 
     const base: Convocatoria = {
       id: newId("C"),
@@ -270,24 +267,65 @@ export const convocatoriaStore = {
       fin: new Date(Date.now() + 13 * 60 * 60 * 1000).toISOString(),
       cupos: 1,
       vencimiento: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
-      prioridad,
+      prioridad: "ALTA",
       notas: "Guardia demo. Presentarse 15 minutos antes.",
       estado: "ENVIADA",
-      modoEnvio: "SECUENCIAL",
-      timeouts: autoT,
-      invitaciones: ordered.map((medicoId, idx): Invitacion => ({
+      modoEnvio: "MASIVO",
+      timeouts: { sinVerMin: 60, sinResponderMin: 60 },
+      invitaciones: ordered.map((medicoId): Invitacion => ({
         medicoId,
-        estado: idx === 0 ? "ENVIADA" : "EN_ESPERA",
-        canal: "APP",
-        sentAt: idx === 0 ? nowIso() : undefined
+        estado: "ENVIADA",
+        canal: "WHATSAPP",
+        sentAt: nowIso(),
       })),
       asignaciones: [],
-      canales: ["APP"],
+      canales: ["WHATSAPP"],
       createdAt: nowIso(),
       createdBy: "F-1001"
     };
 
     storage.set(KEY, [base]);
+  },
+
+  setInvManual(convId: string, medicoId: string, nuevoEstado: "ENVIADA" | "ACEPTO" | "RECHAZO" | "SIN_RESPUESTA") {
+    const all = storage.get<Convocatoria[]>(KEY, []);
+    const idx = all.findIndex(c => c.id === convId);
+    if (idx < 0) return;
+
+    const c = all[idx];
+    if (c.estado === "CANCELADA") return;
+
+    const inv = (c.invitaciones || []).find(i => i.medicoId === medicoId);
+    if (!inv) return;
+
+    if (nuevoEstado === "ENVIADA") {
+      inv.estado = "ENVIADA";
+      inv.sentAt = nowIso();
+      delete (inv as any).seenAt;
+      delete (inv as any).respondedAt;
+    } else if (nuevoEstado === "ACEPTO") {
+      if (inv.estado === "ACEPTO") return;
+      inv.estado = "ACEPTO";
+      inv.respondedAt = nowIso();
+      const asign: Asignacion = {
+        id: newId("A"),
+        medicoId,
+        estado: "CONFIRMADA",
+        createdAt: nowIso(),
+      };
+      c.asignaciones.unshift(asign);
+    } else if (nuevoEstado === "RECHAZO") {
+      if (inv.estado === "RECHAZO") return;
+      inv.estado = "RECHAZO";
+      inv.respondedAt = nowIso();
+    } else if (nuevoEstado === "SIN_RESPUESTA") {
+      inv.estado = "SIN_RESPUESTA";
+      inv.respondedAt = nowIso();
+    }
+
+    c.estado = computeEstado(c);
+    c.updatedAt = nowIso();
+    storage.set(KEY, all);
   },
 
   createAndSend(input: {

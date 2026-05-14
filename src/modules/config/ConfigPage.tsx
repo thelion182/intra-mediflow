@@ -7,7 +7,7 @@ import { prioAuditStore, type PrioAuditEntry } from "../convocatorias/prio.audit
 import type { SystemConfig, Canal, WhatsAppProvider, SmsProvider, EmailProvider, FotosConfig } from "./config.types";
 import { CANAL_META } from "./config.types";
 
-type Tab = "usuarios" | "org" | "canales" | "defaults" | "scoring" | "auditoria";
+type Tab = "usuarios" | "org" | "defaults" | "scoring" | "auditoria";
 
 // ── Toggle ────────────────────────────────────────────────────────────────
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
@@ -151,10 +151,9 @@ export function ConfigPage() {
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "usuarios",  label: "Usuarios" },
-    { id: "canales",   label: "Canales" },
+    { id: "org",       label: "Organización" },
     { id: "defaults",  label: "Convocatorias" },
     { id: "scoring",   label: "Scoring" },
-    { id: "org",       label: "Organización" },
     ...(session?.role === "SUPER_ADMIN" ? [{ id: "auditoria" as Tab, label: "Auditoría prioridades" }] : []),
   ];
 
@@ -204,8 +203,8 @@ export function ConfigPage() {
         <UsersAdmin currentRole={session?.role ?? "ADMIN"} />
       )}
 
-      {/* ── Tab: Canales ──────────────────────────────────────────────────── */}
-      {tab === "canales" && (
+      {/* Tab canales removida — INTRA MediFlow solo usa WhatsApp manual */}
+      {false && (
         <div style={{ display: "grid", gap: 16 }}>
 
           {/* Canales por defecto */}

@@ -1,134 +1,92 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { authStore } from "../../auth/auth.store";
 import { convocatoriaStore, getMedicosCatalogo } from "./convocatoria.store";
+import { medicosStore } from "../admin/medicos.store";
+import { especialidadesStore } from "../admin/especialidades.store";
+import { configStore } from "../config/config.store";
 import { AppShell } from "../../ui/AppShell";
-import type { Canal } from "./convocatoria.types";
-import { CANAL_META } from "../config/config.types";
 
-function CanalTag({ canal }: { canal: Canal }) {
-  const meta = CANAL_META[canal] ?? { label: canal, rgb: "100,116,139" };
-  return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", padding: "2px 8px",
-      borderRadius: 5, fontSize: 11, fontWeight: 700,
-      background: `rgba(${meta.rgb}, 0.12)`,
-      color: `rgb(${meta.rgb})`,
-      border: `1px solid rgba(${meta.rgb}, 0.25)`,
-    }}>
-      {meta.label}
-    </span>
-  );
-}
-
-const SUPLENCIAS_WHATSAPP = "+59899737934";
-
-function waLink(phoneE164: string, text: string) {
-  const t = encodeURIComponent(text);
-  const digits = String(phoneE164 || "").replace(/\D/g, "");
-  return `https://wa.me/${digits}?text=${t}`;
-}
+// ── Helpers ────────────────────────────────────────────────────────────────
 
 function fmt(dtIso?: string) {
   if (!dtIso) return "—";
-  try {
-    return new Date(dtIso).toLocaleString();
-  } catch {
-    return "—";
-  }
+  try { return new Date(dtIso).toLocaleString("es-UY", { dateStyle: "short", timeStyle: "short" }); }
+  catch { return "—"; }
 }
 
-function pillStyle(kind: "INFO" | "OK" | "WARN" | "BAD" | "MUTED") {
-  switch (kind) {
-    case "OK":
-      return { background: "rgba(16,185,129,.10)", borderColor: "rgba(16,185,129,.25)" };
-    case "WARN":
-      return { background: "rgba(245,158,11,.10)", borderColor: "rgba(245,158,11,.25)" };
-    case "BAD":
-      return { background: "rgba(239,68,68,.10)", borderColor: "rgba(239,68,68,.25)" };
-    case "INFO":
-      return { background: "rgba(59,130,246,.10)", borderColor: "rgba(59,130,246,.25)" };
-    default:
-      return { background: "rgba(148,163,184,.10)", borderColor: "rgba(148,163,184,.25)" };
-  }
+function fmtDate(dtIso?: string) {
+  if (!dtIso) return "—";
+  try { return new Date(dtIso).toLocaleDateString("es-UY"); }
+  catch { return "—"; }
 }
 
-function invBadge(estado: string) {
+function waLink(phoneE164: string, text: string) {
+  const digits = String(phoneE164 || "").replace(/\D/g, "");
+  return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
+}
+
+function estadoBadgeStyle(estado: string): React.CSSProperties {
   switch (estado) {
-    case "ENVIADA":
-      return { label: "ENVIADA", kind: "INFO" as const };
-    case "VISTA":
-      return { label: "VISTA", kind: "INFO" as const };
-    case "EN_ESPERA":
-      return { label: "EN ESPERA", kind: "MUTED" as const };
-    case "ACEPTO":
-      return { label: "ACEPTÓ", kind: "OK" as const };
-    case "RECHAZO":
-      return { label: "RECHAZÓ", kind: "BAD" as const };
-    case "VENCIDA":
-      return { label: "VENCIDA", kind: "WARN" as const };
-    case "SIN_RESPUESTA":
-      return { label: "SIN CUPO", kind: "MUTED" as const };
-    default:
-      return { label: estado || "—", kind: "MUTED" as const };
+    case "ENVIADA":       return { background: "rgba(59,130,246,.12)",  color: "rgb(29,78,216)",   border: "1px solid rgba(59,130,246,.30)"  };
+    case "ACEPTO":        return { background: "rgba(22,163,74,.12)",   color: "rgb(15,118,55)",   border: "1px solid rgba(22,163,74,.35)"   };
+    case "RECHAZO":       return { background: "rgba(220,38,38,.10)",   color: "rgb(185,28,28)",   border: "1px solid rgba(220,38,38,.30)"   };
+    case "SIN_RESPUESTA": return { background: "rgba(217,119,6,.10)",   color: "rgb(161,85,4)",    border: "1px solid rgba(217,119,6,.30)"   };
+    default:              return { background: "rgba(100,116,139,.10)", color: "rgb(71,85,105)",   border: "1px solid rgba(100,116,139,.25)" };
   }
 }
 
-function formatMs(ms: number) {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  const mm = String(Math.floor(s / 60)).padStart(2, "0");
-  const ss = String(s % 60).padStart(2, "0");
-  return `${mm}:${ss}`;
+function estadoLabel(estado: string) {
+  switch (estado) {
+    case "ENVIADA":       return "Notificado";
+    case "ACEPTO":        return "Aceptó";
+    case "RECHAZO":       return "Rechazó";
+    case "SIN_RESPUESTA": return "Sin respuesta";
+    case "EN_ESPERA":     return "En espera";
+    case "VENCIDA":       return "Vencida";
+    case "CUBIERTA_X_OTRO": return "Cubierto x otro";
+    default:              return estado || "—";
+  }
 }
+
+function convEstadoBadge(estado: string): React.CSSProperties {
+  switch (estado) {
+    case "CUBIERTA": return { background: "rgba(22,163,74,.15)",  color: "rgb(15,118,55)",  border: "1px solid rgba(22,163,74,.40)"  };
+    case "ENVIADA":  return { background: "rgba(59,130,246,.12)", color: "rgb(29,78,216)",  border: "1px solid rgba(59,130,246,.30)" };
+    case "PARCIAL":  return { background: "rgba(217,119,6,.12)",  color: "rgb(161,85,4)",   border: "1px solid rgba(217,119,6,.30)"  };
+    case "VENCIDA":  return { background: "rgba(220,38,38,.10)",  color: "rgb(185,28,28)",  border: "1px solid rgba(220,38,38,.30)"  };
+    case "CANCELADA":return { background: "rgba(100,116,139,.12)",color: "rgb(71,85,105)",  border: "1px solid rgba(100,116,139,.30)"};
+    default:         return { background: "rgba(100,116,139,.10)",color: "rgb(71,85,105)",  border: "1px solid rgba(100,116,139,.25)"};
+  }
+}
+
+// ── DetalleConvocatoria ────────────────────────────────────────────────────
 
 export function DetalleConvocatoria() {
   const { id } = useParams();
   const nav = useNavigate();
   const session = authStore.getSession()!;
   const [tick, setTick] = useState(0);
-
-  // “reloj” UI para countdown (sin tocar store)
-  const [nowTick, setNowTick] = useState(() => Date.now());
-  useEffect(() => {
-    let interval: number | null = null;
-
-    const start = () => {
-      if (interval) return;
-      interval = window.setInterval(() => {
-        if (document.visibilityState === "visible") setNowTick(Date.now());
-      }, 1000);
-    };
-
-    const stop = () => {
-      if (!interval) return;
-      window.clearInterval(interval);
-      interval = null;
-    };
-
-    const onVis = () => {
-      if (document.visibilityState === "visible") {
-        setNowTick(Date.now());
-        start();
-      } else {
-        stop();
-      }
-    };
-
-    if (document.visibilityState === "visible") start();
-    document.addEventListener("visibilitychange", onVis);
-    return () => {
-      document.removeEventListener("visibilitychange", onVis);
-      stop();
-    };
-  }, []);
+  const [editMode, setEditMode] = useState(false);
+  const [cancelConfirm, setCancelConfirm] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
 
   const c = useMemo(() => (id ? convocatoriaStore.get(id) : null), [id, tick]);
 
   const medicosSnap = useMemo(() => getMedicosCatalogo(), [tick]);
-  const medicoName = (medicoId: string) =>
-    medicosSnap.find(m => m.userId === medicoId)?.nombre ?? medicoId;
+  const medicosFull = useMemo(() => medicosStore.list(), [tick]);
+  const iconosEsp   = useMemo(() => especialidadesStore.getAll(), [tick]);
+  const cfg         = useMemo(() => configStore.get(), []);
 
-  const [editMode, setEditMode] = useState(false);
+  const medicoData = (medicoId: string) => {
+    const m = medicosFull.find(x => x.userId === medicoId);
+    return {
+      nombre: m?.displayName ?? medicoId,
+      telefono: (m as any)?.telefono ?? "",
+      especialidad: (m as any)?.especialidad ?? "",
+      tipo: (m as any)?.tipo ?? "SUPLENTE",
+    };
+  };
 
   const [form, setForm] = useState(() => ({
     sector: c?.sector || "",
@@ -138,134 +96,41 @@ export function DetalleConvocatoria() {
     cupos: c?.cupos || 1,
     vencimiento: c?.vencimiento || "",
     prioridad: (c?.prioridad || "NORMAL") as "NORMAL" | "ALTA",
-    notas: c?.notas || ""
+    notas: c?.notas || "",
   }));
-
-  // si cambia convocatoria por refresh, sincronizamos form cuando NO está editando
-  useEffect(() => {
-    if (!c) return;
-    if (editMode) return;
-    setForm({
-      sector: c.sector || "",
-      sede: c.sede || "",
-      inicio: c.inicio,
-      fin: c.fin,
-      cupos: c.cupos,
-      vencimiento: c.vencimiento,
-      prioridad: c.prioridad,
-      notas: c.notas || ""
-    });
-  }, [c?.id, tick, editMode]);
 
   if (!c) {
     return (
-      <div className="page">
-        <div className="shell">
-          <div className="panel">
-            <b>No encontrada.</b>
-            <div style={{ marginTop: 10 }}>
-              <button className="btnGhost" onClick={() => nav("/dashboard")}>
-                Volver
-              </button>
-            </div>
-          </div>
+      <AppShell>
+        <div style={{ padding: 40, textAlign: "center" }}>
+          <p style={{ color: "var(--muted)" }}>Convocatoria no encontrada.</p>
+          <button onClick={() => nav("/dashboard")} style={ghostBtn}>Volver al dashboard</button>
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   const confirmadas = (c.asignaciones || []).filter(
-    x => x.estado === "CONFIRMADA" || x.estado === "CUMPLIDA"
+    a => a.estado === "CONFIRMADA" || a.estado === "CUMPLIDA"
   ).length;
 
-  const isSecuencial = (c.modoEnvio ?? "MASIVO") === "SECUENCIAL" && (Number(c.cupos) || 1) === 1;
+  const cancelada = c.estado === "CANCELADA";
 
-  // Activo (en secuencial): primera invitación ENVIADA/VISTA
-  const activeInvIdx = useMemo(() => {
-    if (!isSecuencial) return -1;
-    return (c.invitaciones || []).findIndex((i: any) => i.estado === "ENVIADA" || i.estado === "VISTA");
-  }, [c.id, tick, isSecuencial]);
-
-  const activeInv = isSecuencial && activeInvIdx >= 0 ? (c.invitaciones[activeInvIdx] as any) : null;
-
-  // Timeouts del modelo (ya vienen guardados desde el store)
-  const timeouts = (c as any).timeouts as { sinVerMin: number; sinResponderMin: number } | undefined;
-  const sinVerMin = typeof timeouts?.sinVerMin === "number" ? timeouts!.sinVerMin : 60;
-  const sinResponderMin = typeof timeouts?.sinResponderMin === "number" ? timeouts!.sinResponderMin : 60;
-
-  // “Próximo vencimiento” del activo
-  const proximoVenc = useMemo(() => {
-    if (!isSecuencial) return null;
-    if (!activeInv) return null;
-
-    const st = String(activeInv.estado || "");
-    const sentAt = activeInv.sentAt ? new Date(activeInv.sentAt).getTime() : null;
-    const seenAt = activeInv.seenAt ? new Date(activeInv.seenAt).getTime() : null;
-
-    if (st === "ENVIADA" && sentAt !== null) {
-      const deadline = sentAt + sinVerMin * 60_000;
-      return {
-        motivo: `Si NO la ve en ${sinVerMin} min, pasa al siguiente.`,
-        deadline
-      };
-    }
-
-    if (st === "VISTA" && seenAt !== null && !activeInv.respondedAt) {
-      const deadline = seenAt + sinResponderMin * 60_000;
-      return {
-        motivo: `Si NO responde en ${sinResponderMin} min luego de verla, pasa al siguiente.`,
-        deadline
-      };
-    }
-
-    return null;
-  }, [
-    isSecuencial,
-    activeInv?.estado,
-    activeInv?.sentAt,
-    activeInv?.seenAt,
-    activeInv?.respondedAt,
-    sinVerMin,
-    sinResponderMin
-  ]);
-
-  const msLeft = proximoVenc ? (proximoVenc.deadline - nowTick) : null;
-  const isExpired = typeof msLeft === "number" ? msLeft <= 0 : false;
-
-  // Invitaciones ordenadas por "orden" (ya viene por prioridad desde el store)
-  const invitacionesOrdenadas = useMemo(() => {
-    return [...(c.invitaciones || [])];
-  }, [c.id, tick]);
-
-  // Mensajes WhatsApp
-  function msgUpdate() {
+  // ── Generador de mensaje WA ──────────────────────────────────────────────
+  function buildWaMsg(medicoNombre: string) {
+    const inst = cfg.organizacion.nombre || "INTRA MediFlow";
+    const turnoInicio = fmt(c.inicio);
+    const turnoFin    = fmt(c.fin);
+    const sector = c.sector + (c.sede ? ` · ${c.sede}` : "");
     return (
-      `Mediflow · Círculo Católico\n` +
-      `Convocatoria ${c.id} fue ACTUALIZADA.\n` +
-      `Sector: ${c.sector}${c.sede ? ` · ${c.sede}` : ""}\n` +
-      `Turno: ${fmt(c.inicio)} → ${fmt(c.fin)}\n` +
-      `Por favor revisar en la app.`
-    );
-  }
-
-  function msgCancel() {
-    return (
-      `Mediflow · Círculo Católico\n` +
-      `Convocatoria ${c.id} fue CANCELADA.\n` +
-      `Sector: ${c.sector}${c.sede ? ` · ${c.sede}` : ""}\n` +
-      `Turno: ${fmt(c.inicio)} → ${fmt(c.fin)}\n` +
-      `Motivo: ${c.cancelReason || "—"}\n` +
-      `Gracias.`
-    );
-  }
-
-  function msgTurnoActivo(nextOrd: number) {
-    return (
-      `Mediflow · Círculo Católico\n` +
-      `Te toca tu turno (#${nextOrd}) en convocatoria ${c.id}.\n` +
-      `Sector: ${c.sector}${c.sede ? ` · ${c.sede}` : ""}\n` +
-      `Turno: ${fmt(c.inicio)} → ${fmt(c.fin)}\n` +
-      `Por favor ingresá a la app y aceptá o rechazá.\n` +
+      `*${inst}*\n` +
+      `📋 *Convocatoria de Guardia* [${c.id}]\n\n` +
+      `Dr./Dra. *${medicoNombre}*\n\n` +
+      `Sector: ${sector}\n` +
+      `Turno: ${turnoInicio} → ${turnoFin}\n` +
+      (c.notas ? `Notas: ${c.notas}\n` : "") +
+      `\n¿Podés cubrir esta guardia?\n` +
+      `Respondé con *Acepto* o *No puedo*.\n\n` +
       `Gracias.`
     );
   }
@@ -273,363 +138,350 @@ export function DetalleConvocatoria() {
   function onSaveEdit() {
     const sector = form.sector.trim();
     if (!sector) return alert("Sector es obligatorio.");
-    const inicio = new Date(form.inicio).toISOString();
-    const fin = new Date(form.fin).toISOString();
-    const venc = new Date(form.vencimiento).toISOString();
-    const cupos = Number(form.cupos) || 1;
-
     convocatoriaStore.update(
       c.id,
       {
         sector,
         sede: form.sede.trim() || undefined,
-        inicio,
-        fin,
-        cupos,
-        vencimiento: venc,
+        inicio: new Date(form.inicio).toISOString(),
+        fin: new Date(form.fin).toISOString(),
+        cupos: Number(form.cupos) || 1,
+        vencimiento: new Date(form.vencimiento).toISOString(),
         prioridad: form.prioridad,
-        notas: form.notas.trim() || undefined
+        notas: form.notas.trim() || undefined,
       },
-      session.userId,
-      `Editada por ${session.userId}`
+      session.userId
     );
-
     setEditMode(false);
     setTick(t => t + 1);
-    alert("Convocatoria actualizada. Podés avisar por WhatsApp desde 'Invitaciones'.");
   }
 
-  function onCancelConv() {
-    const reason = (prompt("Motivo de cancelación (obligatorio):") || "").trim();
-    if (!reason) return alert("Debe ingresar un motivo.");
+  function onCancel() {
+    const reason = cancelReason.trim();
+    if (!reason) return alert("Ingresá el motivo de cancelación.");
     convocatoriaStore.cancel(c.id, reason, session.userId);
-    setEditMode(false);
-    setTick(t => t + 1);
-    alert("Convocatoria cancelada. Podés avisar por WhatsApp desde 'Invitaciones'.");
-  }
-
-  function forceAdvanceNow() {
-    if (!isSecuencial) return;
-
-    const ok = confirm(
-      "Forzar avance secuencial ahora:\n\n" +
-        "- recalcula timeouts\n" +
-        "- si el activo venció, lo marca VENCIDA y activa el siguiente\n\n" +
-        "¿Continuar?"
-    );
-    if (!ok) return;
-
-    // Dispara hydrate() => autoAdvanceAll() dentro del store al leer
-    convocatoriaStore.list();
+    setCancelConfirm(false);
+    setCancelReason("");
     setTick(t => t + 1);
   }
 
-  // ✅ NUEVO: salta el activo aunque NO esté vencido (y abre WhatsApp al siguiente)
-  function skipToNextNow() {
-    if (!isSecuencial) return;
-    if (c.estado === "CANCELADA") return;
-
-    const ok = confirm(
-      "Activar siguiente (saltando):\n\n" +
-        "- marca al ACTIVO actual como VENCIDA\n" +
-        "- activa el siguiente EN_ESPERA como ENVIADA\n" +
-        "- abre WhatsApp al siguiente (si tiene teléfono)\n\n" +
-        "Esto saltea al médico aunque aún esté en tiempo.\n" +
-        "¿Continuar?"
-    );
-    if (!ok) return;
-
-    const iso = new Date().toISOString();
-
-    // copiamos para no mutar el objeto original
-    const invs = [...(c.invitaciones || [])].map(i => ({ ...(i as any) })) as any[];
-
-    const activeIdx = invs.findIndex(i => i.estado === "ENVIADA" || i.estado === "VISTA");
-    if (activeIdx < 0) {
-      alert("No hay invitación activa para saltar.");
-      return;
-    }
-
-    const nextIdx = invs.findIndex(i => i.estado === "EN_ESPERA");
-    if (nextIdx < 0) {
-      // no hay siguiente, igual dejamos vencida la activa y listo
-      invs[activeIdx].estado = "VENCIDA";
-      invs[activeIdx].respondedAt = iso;
-
-      convocatoriaStore.update(
-        c.id,
-        { invitaciones: invs as any },
-        session.userId,
-        `Salto manual: no había siguiente (by ${session.userId})`
-      );
-
-      setTick(t => t + 1);
-      alert("Se venció el activo, pero no había siguiente EN_ESPERA.");
-      return;
-    }
-
-    // vencer activo
-    invs[activeIdx].estado = "VENCIDA";
-    invs[activeIdx].respondedAt = iso;
-
-    // activar siguiente
-    invs[nextIdx].estado = "ENVIADA";
-    invs[nextIdx].sentAt = iso;
-    delete invs[nextIdx].seenAt;
-    delete invs[nextIdx].respondedAt;
-
-    const nextMedicoId = String(invs[nextIdx].medicoId || "");
-    const nextOrd = nextIdx + 1;
-
-    convocatoriaStore.update(
-      c.id,
-      { invitaciones: invs as any },
-      session.userId,
-      `Salto manual al siguiente (by ${session.userId})`
-    );
-
+  function setInv(medicoId: string, estado: "ENVIADA" | "ACEPTO" | "RECHAZO" | "SIN_RESPUESTA") {
+    convocatoriaStore.setInvManual(c.id, medicoId, estado);
     setTick(t => t + 1);
-
-    // 🔥 WhatsApp automático al siguiente (si tiene tel)
-    const tel = convocatoriaStore.getMedicoPhone(nextMedicoId);
-    if (tel) {
-      // mensaje específico de “te toca”
-      const texto = msgTurnoActivo(nextOrd);
-      window.open(waLink(tel, texto), "_blank");
-    } else {
-      alert(`Siguiente activado (ORD #${nextOrd}), pero no tiene teléfono cargado.`);
-    }
   }
+
+  const TIPO_RGB: Record<string, string> = {
+    TITULAR: "21,101,192", SUPLENTE: "22,163,74", INDEPENDIENTE: "217,119,6",
+  };
 
   return (
     <AppShell>
-      {/* Header */}
+      {/* ── Header ── */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: "-0.03em" }}>
-            {c.sector}{c.sede ? ` · ${c.sede}` : ""}
-          </h1>
-          <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--muted)" }}>
-            {fmt(c.inicio)} → {fmt(c.fin)} · Modo: <b>{isSecuencial ? "SECUENCIAL" : "MASIVO"}</b>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: "-0.03em" }}>
+              {c.sector}{c.sede ? ` · ${c.sede}` : ""}
+            </h1>
+            <span style={{
+              padding: "3px 10px", borderRadius: 20, fontSize: 11.5, fontWeight: 700,
+              ...convEstadoBadge(c.estado),
+            }}>{c.estado}</span>
+            {c.prioridad === "ALTA" && (
+              <span style={{
+                padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700,
+                background: "rgba(220,38,38,.10)", color: "rgb(185,28,28)", border: "1px solid rgba(220,38,38,.30)",
+              }}>ALTA PRIORIDAD</span>
+            )}
+          </div>
+          <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>
+            {fmtDate(c.inicio)} · {fmt(c.inicio).split(",")[1]?.trim()} → {fmt(c.fin).split(",")[1]?.trim()}
+            {" · "}{confirmadas}/{c.cupos} cupo{c.cupos !== 1 ? "s" : ""} cubierto{c.cupos !== 1 ? "s" : ""}
           </p>
         </div>
-        <div>
-          <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button onClick={() => nav("/dashboard")} style={ghostBtn}>← Volver</button>
+          <button onClick={() => setTick(t => t + 1)} style={ghostBtn} title="Refrescar">↺</button>
+          {!cancelada && (
+            <>
+              <button onClick={() => { setEditMode(v => !v); setCancelConfirm(false); }} style={ghostBtn}>
+                {editMode ? "Cerrar edición" : "Editar"}
+              </button>
+              <button
+                onClick={() => { setCancelConfirm(v => !v); setEditMode(false); }}
+                style={{ ...ghostBtn, borderColor: "rgba(220,38,38,.30)", color: "rgb(185,28,28)" }}
+              >
+                Cancelar convocatoria
+              </button>
+            </>
+          )}
+        </div>
+      </div>
 
-            <span className="pill">{c.estado}</span>
-
-            <button className="btnGhost" onClick={() => nav("/dashboard")}>
-              Volver
-            </button>
-
-            <button className="btnGhost" onClick={() => setTick(t => t + 1)}>
-              Refrescar
-            </button>
-
-            {isSecuencial && c.estado !== "CANCELADA" ? (
-              <>
-                <button
-                  className="btnGhost"
-                  onClick={forceAdvanceNow}
-                  style={{ borderColor: "rgba(245,158,11,.35)" }}
-                  title="Fuerza la evaluación de timeouts del secuencial ahora"
-                >
-                  Forzar avance secuencial
-                </button>
-
-                <button
-                  className="btnGhost"
-                  onClick={skipToNextNow}
-                  style={{ borderColor: "rgba(239,68,68,.35)" }}
-                  title="Salta al siguiente médico (marca vencida la invitación activa) + WhatsApp automático"
-                >
-                  Activar siguiente (saltando)
-                </button>
-              </>
-            ) : null}
-
-            {c.estado !== "CANCELADA" ? (
-              <>
-                <button className="btnGhost" onClick={() => setEditMode(v => !v)}>
-                  {editMode ? "Cerrar edición" : "Editar"}
-                </button>
-
-                <button
-                  className="btnGhost"
-                  onClick={onCancelConv}
-                  style={{ borderColor: "rgba(239,68,68,.25)" }}
-                >
-                  Cancelar
-                </button>
-              </>
-            ) : null}
+      {/* ── Cancelar confirm ── */}
+      {cancelConfirm && (
+        <div style={alertBox("rgba(220,38,38,.08)", "rgba(220,38,38,.30)")}>
+          <p style={{ margin: "0 0 10px", fontWeight: 700, color: "rgb(185,28,28)" }}>Cancelar convocatoria</p>
+          <input
+            style={inputStyle} placeholder="Motivo de cancelación (obligatorio)"
+            value={cancelReason} onChange={e => setCancelReason(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && onCancel()}
+          />
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <button onClick={onCancel} style={dangerBtn}>Confirmar cancelación</button>
+            <button onClick={() => { setCancelConfirm(false); setCancelReason(""); }} style={ghostBtn}>Cerrar</button>
           </div>
         </div>
+      )}
 
-        <div className="grid">
-          {/* ✅ Proximo vencimiento (solo SECUENCIAL) */}
-          {isSecuencial ? (
-            <div className="panel" style={{ padding: 12 }}>
-              <h3 style={{ margin: 0, fontSize: 14 }}>Secuencial · Próximo vencimiento</h3>
+      {/* ── Editar convocatoria ── */}
+      {editMode && (
+        <div style={panelStyle}>
+          <h3 style={h3Style}>Editar convocatoria</h3>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div>
+              <label style={lblStyle}>Sector</label>
+              <input style={inputStyle} value={form.sector} onChange={e => setForm(f => ({ ...f, sector: e.target.value }))} />
+            </div>
+            <div>
+              <label style={lblStyle}>Sede</label>
+              <input style={inputStyle} value={form.sede} onChange={e => setForm(f => ({ ...f, sede: e.target.value }))} />
+            </div>
+            <div>
+              <label style={lblStyle}>Inicio</label>
+              <input style={inputStyle} type="datetime-local" value={form.inicio?.slice(0,16)} onChange={e => setForm(f => ({ ...f, inicio: e.target.value }))} />
+            </div>
+            <div>
+              <label style={lblStyle}>Fin</label>
+              <input style={inputStyle} type="datetime-local" value={form.fin?.slice(0,16)} onChange={e => setForm(f => ({ ...f, fin: e.target.value }))} />
+            </div>
+            <div>
+              <label style={lblStyle}>Vencimiento</label>
+              <input style={inputStyle} type="datetime-local" value={form.vencimiento?.slice(0,16)} onChange={e => setForm(f => ({ ...f, vencimiento: e.target.value }))} />
+            </div>
+            <div>
+              <label style={lblStyle}>Cupos</label>
+              <input style={inputStyle} type="number" min={1} value={form.cupos} onChange={e => setForm(f => ({ ...f, cupos: Number(e.target.value) }))} />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={lblStyle}>Notas</label>
+              <textarea style={{ ...inputStyle, minHeight: 60, resize: "vertical" }} value={form.notas} onChange={e => setForm(f => ({ ...f, notas: e.target.value }))} />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+            <button onClick={onSaveEdit} style={primaryBtn}>Guardar cambios</button>
+            <button onClick={() => setEditMode(false)} style={ghostBtn}>Cancelar</button>
+          </div>
+        </div>
+      )}
 
-              {activeInv ? (
-                <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
-                  <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                    <span className="pill" style={pillStyle("OK")}>ACTIVO: {medicoName(activeInv.medicoId)}</span>
-                    <span className="pill" style={pillStyle("MUTED")}>ORD #{activeInvIdx + 1}</span>
-                    <span className="pill">{String(activeInv.estado || "—")}</span>
-                    <span className="pill">sinVer: {sinVerMin}m</span>
-                    <span className="pill">sinResp: {sinResponderMin}m</span>
+      <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 16, alignItems: "start" }}>
+
+        {/* ── Panel de Despacho ── */}
+        <div style={panelStyle}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+            <h3 style={{ ...h3Style, margin: 0 }}>Panel de Despacho</h3>
+            <span style={{ fontSize: 12, color: "var(--muted)" }}>
+              {(c.invitaciones || []).filter(i => i.estado === "ACEPTO").length} aceptaron ·{" "}
+              {(c.invitaciones || []).filter(i => i.estado === "RECHAZO" || i.estado === "SIN_RESPUESTA").length} rechazaron/sin resp. ·{" "}
+              {(c.invitaciones || []).filter(i => i.estado === "ENVIADA").length} pendientes
+            </span>
+          </div>
+
+          {(c.invitaciones || []).length === 0 && (
+            <p style={{ color: "var(--muted)", fontSize: 13 }}>No hay médicos en esta convocatoria.</p>
+          )}
+
+          <div style={{ display: "grid", gap: 10 }}>
+            {(c.invitaciones || []).map((inv: any, idx: number) => {
+              const md = medicoData(inv.medicoId);
+              const rgb = TIPO_RGB[md.tipo] ?? "100,116,139";
+              const icono = iconosEsp[md.especialidad] ?? "";
+              const tel = md.telefono;
+              const waMsg = buildWaMsg(md.nombre);
+              const estado = inv.estado as string;
+
+              return (
+                <div key={inv.medicoId} style={{
+                  borderRadius: 12, border: `1px solid var(--border-2)`,
+                  borderLeft: `3.5px solid rgb(${rgb})`,
+                  background: estado === "ACEPTO"
+                    ? "rgba(22,163,74,0.04)"
+                    : estado === "RECHAZO" || estado === "SIN_RESPUESTA"
+                    ? "rgba(100,116,139,0.04)"
+                    : "var(--surface-2)",
+                  padding: "12px 14px",
+                  transition: "all 0.12s",
+                }}>
+                  {/* Fila superior: nombre + estado + WA */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span style={{ fontWeight: 700, fontSize: 13.5, color: "var(--text)" }}>
+                        {idx + 1}. {md.nombre}
+                      </span>
+                      {md.especialidad && (
+                        <span style={{ fontSize: 12, color: "var(--muted)" }}>
+                          {icono ? `${icono} ` : ""}{md.especialidad}
+                        </span>
+                      )}
+                      <span style={{
+                        padding: "1px 8px", borderRadius: 20, fontSize: 10.5, fontWeight: 700,
+                        background: `rgba(${rgb},0.12)`, color: `rgb(${rgb})`, border: `1px solid rgba(${rgb},0.22)`,
+                      }}>{md.tipo === "INDEPENDIENTE" ? "Indep." : md.tipo === "TITULAR" ? "Titular" : "Suplente"}</span>
+                      {tel
+                        ? <span style={{ fontSize: 11, color: "var(--subtle)" }}>📞 {tel}</span>
+                        : <span style={{ fontSize: 11, color: "rgb(185,28,28)" }}>Sin teléfono</span>
+                      }
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{
+                        padding: "3px 10px", borderRadius: 20, fontSize: 11.5, fontWeight: 700,
+                        ...estadoBadgeStyle(estado),
+                      }}>{estadoLabel(estado)}</span>
+
+                      {tel && !cancelada && (
+                        <a
+                          href={waLink(tel, waMsg)}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="Enviar invitación por WhatsApp"
+                          style={{
+                            display: "inline-flex", alignItems: "center", gap: 5,
+                            padding: "6px 13px", borderRadius: 8, fontSize: 12.5, fontWeight: 700,
+                            background: "rgba(37,211,102,0.12)", color: "rgb(18,130,60)",
+                            border: "1.5px solid rgba(37,211,102,0.40)", textDecoration: "none",
+                            transition: "all 0.12s",
+                          }}
+                        >
+                          📱 WA
+                        </a>
+                      )}
+                    </div>
                   </div>
 
-                  {proximoVenc ? (
-                    <div className="btnGhost" style={{ padding: 12, textAlign: "left" }}>
-                      <div className="row" style={{ justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                        <b>Cuenta regresiva</b>
-                        <span
-                          className="pill"
-                          style={pillStyle(isExpired ? "BAD" : (msLeft! < 2 * 60_000 ? "WARN" : "INFO"))}
-                        >
-                          {isExpired ? "VENCIDO" : formatMs(msLeft!)}
-                        </span>
-                      </div>
-
-                      <div className="sub" style={{ marginTop: 6 }}>
-                        Vence a las: <b>{new Date(proximoVenc.deadline).toLocaleString()}</b>
-                      </div>
-
-                      <div className="sub" style={{ marginTop: 6 }}>
-                        {proximoVenc.motivo}
-                      </div>
-
-                      {isExpired ? (
-                        <div className="sub" style={{ marginTop: 6 }}>
-                          Si querés que avance YA (sin esperar refresh del dashboard), tocá <b>Forzar avance secuencial</b>.
-                        </div>
-                      ) : null}
+                  {/* Fila inferior: botones de estado manual */}
+                  {!cancelada && (
+                    <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+                      {(["ENVIADA", "ACEPTO", "RECHAZO", "SIN_RESPUESTA"] as const).map(s => {
+                        const active = estado === s;
+                        const styles: Record<string, { bg: string; color: string; border: string; label: string }> = {
+                          ENVIADA:       { bg: "rgba(59,130,246,.12)",  color: "rgb(29,78,216)",  border: "rgba(59,130,246,.40)",  label: "Notificado" },
+                          ACEPTO:        { bg: "rgba(22,163,74,.12)",   color: "rgb(15,118,55)",  border: "rgba(22,163,74,.40)",   label: "Aceptó" },
+                          RECHAZO:       { bg: "rgba(220,38,38,.10)",   color: "rgb(185,28,28)",  border: "rgba(220,38,38,.35)",   label: "Rechazó" },
+                          SIN_RESPUESTA: { bg: "rgba(217,119,6,.10)",   color: "rgb(161,85,4)",   border: "rgba(217,119,6,.35)",   label: "Sin resp." },
+                        };
+                        const st = styles[s];
+                        return (
+                          <button
+                            key={s}
+                            onClick={() => setInv(inv.medicoId, s)}
+                            style={{
+                              padding: "5px 12px", borderRadius: 7, fontSize: 12, fontWeight: active ? 700 : 500,
+                              border: `1.5px solid ${active ? st.border : "var(--border-2)"}`,
+                              background: active ? st.bg : "var(--surface)",
+                              color: active ? st.color : "var(--muted)",
+                              cursor: "pointer", transition: "all 0.12s",
+                            }}
+                          >{st.label} {active ? "✓" : ""}</button>
+                        );
+                      })}
                     </div>
-                  ) : (
-                    <div className="sub">
-                      No hay vencimiento calculable (por ejemplo: ya respondió / no hay timestamps).
+                  )}
+
+                  {/* Timestamps */}
+                  {(inv.sentAt || inv.respondedAt) && (
+                    <div style={{ fontSize: 11, color: "var(--subtle)", marginTop: 7 }}>
+                      {inv.sentAt && `Notificado: ${fmt(inv.sentAt)}`}
+                      {inv.respondedAt && ` · Respondió: ${fmt(inv.respondedAt)}`}
                     </div>
                   )}
                 </div>
-              ) : (
-                <p className="sub" style={{ marginTop: 10 }}>
-                  No hay invitación activa ahora mismo (puede haber terminado la secuencia o estar cubierta).
-                </p>
-              )}
-            </div>
-          ) : null}
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Columna derecha ── */}
+        <div style={{ display: "grid", gap: 14 }}>
 
           {/* Resumen */}
-          <div className="panel half">
-            <h3 style={{ margin: 0, fontSize: 14 }}>Resumen</h3>
-            <p className="sub" style={{ marginTop: 8 }}>
-              Cupos: {confirmadas}/{c.cupos}
-            </p>
-            <p className="sub">Vence: {fmt(c.vencimiento)}</p>
-
-            {c.estado === "CANCELADA" ? (
-              <p className="sub" style={{ marginTop: 8 }}>
-                <b>Cancelada:</b> {c.cancelReason || "—"}
-              </p>
-            ) : null}
-
-            {c.notas ? (
-              <p className="sub">
-                <b>Notas:</b> {c.notas}
-              </p>
-            ) : (
-              <p className="sub">Sin notas.</p>
-            )}
+          <div style={panelStyle}>
+            <h3 style={{ ...h3Style, marginBottom: 12 }}>Resumen</h3>
+            <div style={{ display: "grid", gap: 8 }}>
+              {[
+                { label: "Estado",    value: c.estado },
+                { label: "Prioridad", value: c.prioridad },
+                { label: "Cupos",     value: `${confirmadas} / ${c.cupos} cubiertos` },
+                { label: "Vence",     value: fmt(c.vencimiento) },
+              ].map(r => (
+                <div key={r.label} style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                  <span style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600 }}>{r.label}</span>
+                  <span style={{ fontSize: 12, color: "var(--text)", fontWeight: 700, textAlign: "right" }}>{r.value}</span>
+                </div>
+              ))}
+              {c.notas && (
+                <div style={{ marginTop: 4, padding: "8px 10px", borderRadius: 8, background: "var(--surface-2)", fontSize: 12, color: "var(--muted)", lineHeight: 1.5 }}>
+                  {c.notas}
+                </div>
+              )}
+              {cancelada && c.cancelReason && (
+                <div style={{ padding: "8px 10px", borderRadius: 8, background: "rgba(220,38,38,.08)", fontSize: 12, color: "rgb(185,28,28)", lineHeight: 1.5 }}>
+                  <b>Motivo cancelación:</b> {c.cancelReason}
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Invitaciones + WhatsApp */}
-          <div className="panel">
-            <h3 style={{ margin: 0, fontSize: 14 }}>Invitaciones</h3>
-
-            <p className="sub" style={{ marginTop: 8 }}>
-              {isSecuencial ? (
-                <>
-                  <b>SECUENCIAL:</b> sólo el <b>ORD #1</b> activo recibe/ve/responde. Si vence por tiempo, avanza al siguiente.
-                </>
-              ) : (
-                <>
-                  <b>MASIVO:</b> se envía a todos al mismo tiempo.
-                </>
-              )}{" "}
-              WhatsApp se habilita solo si el médico tiene teléfono cargado.
-            </p>
-
-            <div className="row" style={{ marginTop: 10, gap: 10, flexWrap: "wrap" }}>
-              <a
-                className="btnGhost"
-                href={waLink(SUPLENCIAS_WHATSAPP, c.estado === "CANCELADA" ? msgCancel() : msgUpdate())}
-                target="_blank"
-                rel="noreferrer"
-                title="Mensaje para Suplencias (uso interno)"
-              >
-                WhatsApp Suplencias (mensaje)
-              </a>
-            </div>
-
-            <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-              {invitacionesOrdenadas.map((inv: any, idx: number) => {
-                const tel = convocatoriaStore.getMedicoPhone(inv.medicoId);
-                const texto = c.estado === "CANCELADA" ? msgCancel() : msgUpdate();
-
-                const badge = invBadge(inv.estado);
-                const isActive =
-                  isSecuencial &&
-                  idx === activeInvIdx &&
-                  (inv.estado === "ENVIADA" || inv.estado === "VISTA");
-
-                return (
-                  <div
-                    key={inv.medicoId}
-                    className="btnGhost"
-                    style={{
-                      padding: 12,
-                      textAlign: "left",
-                      borderColor: isActive ? "rgba(16,185,129,.35)" : undefined,
-                      background: isActive ? "rgba(16,185,129,.06)" : undefined
-                    }}
-                  >
-                    <div className="row" style={{ justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                      <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                        <b>{medicoName(inv.medicoId)}</b>
-                        <span className="pill" style={pillStyle("MUTED")}>ORD #{idx + 1}</span>
-
-                        <span className="pill" style={pillStyle(badge.kind)}>{badge.label}</span>
-
-                        {isActive ? <span className="pill" style={pillStyle("OK")}>ACTIVO</span> : null}
-
-                        {/* Canal de envío */}
-                        {inv.canal && inv.estado !== "EN_ESPERA" && <CanalTag canal={inv.canal as Canal} />}
-
-                        <span className="pill">{inv.medicoId}</span>
-                        {tel ? <span className="pill">Tel: {tel}</span> : <span className="pill" style={pillStyle("BAD")}>Sin teléfono</span>}
+          {/* Asignaciones confirmadas */}
+          {(c.asignaciones || []).filter(a => a.estado === "CONFIRMADA" || a.estado === "CUMPLIDA").length > 0 && (
+            <div style={panelStyle}>
+              <h3 style={{ ...h3Style, marginBottom: 12 }}>Médicos asignados</h3>
+              <div style={{ display: "grid", gap: 8 }}>
+                {(c.asignaciones || [])
+                  .filter(a => a.estado === "CONFIRMADA" || a.estado === "CUMPLIDA")
+                  .map(a => {
+                    const md = medicoData(a.medicoId);
+                    return (
+                      <div key={a.id} style={{
+                        display: "flex", alignItems: "center", gap: 10,
+                        padding: "8px 12px", borderRadius: 9,
+                        background: "rgba(22,163,74,0.07)", border: "1px solid rgba(22,163,74,0.25)",
+                      }}>
+                        <span style={{ fontSize: 16 }}>✓</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: 13, color: "var(--text)" }}>{md.nombre}</div>
+                          {md.especialidad && <div style={{ fontSize: 11, color: "var(--muted)" }}>{md.especialidad}</div>}
+                        </div>
+                        <span style={{ fontSize: 11.5, fontWeight: 700, color: "rgb(15,118,55)" }}>{a.estado}</span>
                       </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
 
-                      {tel ? (
-                        <a
-                          className="btnGhost"
-                          href={waLink(tel, texto)}
-                          target="_blank"
-                          rel="noreferrer"
-                          title="Aviso por WhatsApp (canal secundario)"
-                        >
-                          WhatsApp
-                        </a>
-                      ) : null}
-                    </div>
-
-                    <div className="sub" style={{ marginTop: 6 }}>
-                      Enviado: {fmt(inv.sentAt)}
-                      {inv.seenAt ? ` · Visto: ${fmt(inv.seenAt)}` : ""}
-                      {inv.respondedAt ? ` · Respondió: ${fmt(inv.respondedAt)}` : ""}
-                    </div>
+          {/* Stats de despacho */}
+          <div style={panelStyle}>
+            <h3 style={{ ...h3Style, marginBottom: 12 }}>Estado del despacho</h3>
+            <div style={{ display: "grid", gap: 6 }}>
+              {[
+                { label: "Notificados",   est: "ENVIADA",       rgb: "59,130,246" },
+                { label: "Aceptaron",     est: "ACEPTO",        rgb: "22,163,74"  },
+                { label: "Rechazaron",    est: "RECHAZO",       rgb: "220,38,38"  },
+                { label: "Sin respuesta", est: "SIN_RESPUESTA", rgb: "217,119,6"  },
+                { label: "En espera",     est: "EN_ESPERA",     rgb: "100,116,139"},
+              ].map(row => {
+                const count = (c.invitaciones || []).filter((i: any) => i.estado === row.est).length;
+                return (
+                  <div key={row.est} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ flex: 1, fontSize: 12, color: "var(--muted)" }}>{row.label}</div>
+                    <span style={{
+                      padding: "2px 10px", borderRadius: 20, fontSize: 12, fontWeight: 700,
+                      background: count > 0 ? `rgba(${row.rgb},0.12)` : "var(--surface-2)",
+                      color: count > 0 ? `rgb(${row.rgb})` : "var(--subtle)",
+                      border: `1px solid ${count > 0 ? `rgba(${row.rgb},0.30)` : "var(--border-2)"}`,
+                    }}>{count}</span>
                   </div>
                 );
               })}
@@ -639,4 +491,49 @@ export function DetalleConvocatoria() {
       </div>
     </AppShell>
   );
+}
+
+// ── Styles ─────────────────────────────────────────────────────────────────
+
+const panelStyle: React.CSSProperties = {
+  background: "var(--surface)", border: "1px solid var(--border)",
+  borderRadius: 14, padding: "18px 20px",
+};
+
+const h3Style: React.CSSProperties = {
+  margin: 0, fontSize: 15, fontWeight: 700, color: "var(--text)", marginBottom: 14,
+};
+
+const lblStyle: React.CSSProperties = {
+  display: "block", fontSize: 12, fontWeight: 600, color: "var(--muted)", marginBottom: 5,
+};
+
+const inputStyle: React.CSSProperties = {
+  width: "100%", boxSizing: "border-box",
+  padding: "8px 11px", borderRadius: 8,
+  border: "1px solid var(--border)", background: "var(--surface-2)",
+  fontSize: 13, color: "var(--text)", fontFamily: "inherit",
+};
+
+const primaryBtn: React.CSSProperties = {
+  padding: "9px 20px", borderRadius: 9, border: "none",
+  background: "var(--blue)", color: "#fff", fontWeight: 700, fontSize: 13.5, cursor: "pointer",
+};
+
+const ghostBtn: React.CSSProperties = {
+  padding: "8px 16px", borderRadius: 9,
+  border: "1px solid var(--border)", background: "var(--surface-2)",
+  color: "var(--muted)", fontWeight: 600, fontSize: 13, cursor: "pointer",
+};
+
+const dangerBtn: React.CSSProperties = {
+  padding: "9px 20px", borderRadius: 9, border: "none",
+  background: "rgb(220,38,38)", color: "#fff", fontWeight: 700, fontSize: 13.5, cursor: "pointer",
+};
+
+function alertBox(bg: string, border: string): React.CSSProperties {
+  return {
+    padding: "16px 18px", borderRadius: 12, marginBottom: 16,
+    background: bg, border: `1px solid ${border}`,
+  };
 }

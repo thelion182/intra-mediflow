@@ -8,12 +8,8 @@ import { prioAuditStore } from "./prio.audit.store";
 import { medicosStore } from "../admin/medicos.store";
 import { sectoresStore } from "../admin/sectores.store";
 import { sedesStore } from "../admin/sedes.store";
-import { configStore } from "../config/config.store";
-import { CANAL_META } from "../config/config.types";
-import type { Canal } from "./convocatoria.types";
 import type { MedicoTipo, MedicoGremio } from "../admin/medicos.types";
 
-type ModoEnvio    = "MASIVO" | "SECUENCIAL";
 type TipoFiltro   = "TODOS" | MedicoTipo;
 type GremioFiltro = "TODOS" | MedicoGremio;
 type PrioMode   = "SCORING" | "MANUAL";
@@ -126,41 +122,10 @@ export function NuevaConvocatoria() {
   const [prioridad,   setPrioridad]   = useState<"NORMAL"|"ALTA">("NORMAL");
   const [notas,       setNotas]       = useState("");
 
-  // ── Canales ────────────────────────────────────────────────────────────
-  const cfg = configStore.get();
-  const canalesEnabled: Canal[] = (["APP","WHATSAPP","SMS","EMAIL"] as Canal[]).filter(c => {
-    if (c === "APP")      return cfg.canales.app.enabled;
-    if (c === "WHATSAPP") return cfg.canales.whatsapp.enabled;
-    if (c === "SMS")      return cfg.canales.sms.enabled;
-    if (c === "EMAIL")    return cfg.canales.email.enabled;
-    return false;
-  });
-  const [canalesSel, setCanalesSel] = useState<Canal[]>(() => {
-    const defaults = cfg.defaultCanales;
-    const valid = defaults.filter(c => canalesEnabled.includes(c));
-    return valid.length > 0 ? valid : canalesEnabled.length > 0 ? [canalesEnabled[0]] : ["APP"];
-  });
-  function toggleCanal(c: Canal) {
-    setCanalesSel(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]);
-  }
-
-  // ── Modo envío ─────────────────────────────────────────────────────────
-  const [modoEnvio, setModoEnvio]             = useState<ModoEnvio>("SECUENCIAL");
-  const [sinVerMin, setSinVerMin]             = useState(60);
-  const [sinResponderMin, setSinResponderMin] = useState(60);
-  useEffect(() => {
-    if (Number(cupos) > 1 && modoEnvio === "SECUENCIAL") setModoEnvio("MASIVO");
-  }, [cupos]);
-  const cuposNum  = Number(cupos) || 1;
-  const modoFinal: ModoEnvio = modoEnvio === "SECUENCIAL" && cuposNum !== 1 ? "MASIVO" : modoEnvio;
+  const cuposNum = Number(cupos) || 1;
 
   // ── Prioridad de destinatarios ─────────────────────────────────────────
   const [prioMode, setPrioMode] = useState<PrioMode>("SCORING");
-
-  // ── Auto-renovación ────────────────────────────────────────────────────
-  const [autoRenew,         setAutoRenew]         = useState(false);
-  const [autoRenewMinutes,  setAutoRenewMinutes]   = useState(60);
-  const [autoRenewMaxCount, setAutoRenewMaxCount]  = useState(3);
 
   // ── Filtros de médicos ─────────────────────────────────────────────────
   const [qMedico,      setQMedico]      = useState("");
@@ -302,16 +267,11 @@ export function NuevaConvocatoria() {
 
   // ── Submit ─────────────────────────────────────────────────────────────
   function submit() {
-    if (!sectorFinal)         return alert("Sector es obligatorio.");
-    if (!inicio || !fin)      return alert("Inicio y fin son obligatorios.");
+    if (!sectorFinal)            return alert("Sector es obligatorio.");
+    if (!inicio || !fin)         return alert("Inicio y fin son obligatorios.");
     if (new Date(fin) <= new Date(inicio)) return alert("Fin debe ser posterior a Inicio.");
-    if (canalesSel.length === 0)  return alert("Seleccioná al menos un canal.");
     if (destinatarios.length === 0) return alert("Seleccioná al menos un médico.");
-    if (modoFinal === "SECUENCIAL" && cuposNum !== 1) return alert("SECUENCIAL solo con 1 cupo.");
-    if (modoFinal === "SECUENCIAL" && destinatarios.length === 1)
-      if (!confirm("Solo 1 médico seleccionado. ¿Enviás igual en SECUENCIAL?")) return;
 
-    // Guardar auditoría de prioridad manual
     if (prioMode === "MANUAL") {
       const overridesList = Object.entries(prioOverride)
         .filter(([, v]) => v !== undefined)
@@ -346,14 +306,8 @@ export function NuevaConvocatoria() {
       createdBy:   session.userId,
       destinatarios,
       keepOrder:   true,
-      modoEnvio:   modoFinal,
-      canales:     canalesSel.length > 0 ? canalesSel : ["APP"],
-      timeouts:    modoFinal === "SECUENCIAL"
-        ? { sinVerMin: Number(sinVerMin) || 60, sinResponderMin: Number(sinResponderMin) || 60 }
-        : undefined,
-      autoRenew:         autoRenew || undefined,
-      autoRenewMinutes:  autoRenew ? autoRenewMinutes : undefined,
-      autoRenewMaxCount: autoRenew ? autoRenewMaxCount : undefined,
+      modoEnvio:   "MASIVO",
+      canales:     ["WHATSAPP"],
       prioMode,
     });
     nav(`/dashboard/c/${c.id}`);
@@ -367,19 +321,13 @@ export function NuevaConvocatoria() {
         <div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: "-0.03em" }}>Nueva Convocatoria</h1>
           <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--muted)" }}>
-            <span style={{ fontWeight: 600, color: "var(--text)" }}>{destinatarios.length}</span> seleccionados ·
-            <span style={{ marginLeft: 6, fontWeight: 600, color: "var(--text)" }}>{modoFinal}</span> ·
+            <span style={{ fontWeight: 600, color: "var(--text)" }}>{destinatarios.length}</span> médicos seleccionados ·
             <span style={{ marginLeft: 6, fontWeight: 600, color: "var(--text)" }}>{cuposNum}</span> cupo{cuposNum !== 1 ? "s" : ""}
-            {autoRenew && (
-              <span style={{ marginLeft: 8, fontSize: 11.5, color: "rgb(22,163,74)", fontWeight: 600 }}>
-                · ♻ Auto-renovar ×{autoRenewMaxCount}
-              </span>
-            )}
           </p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={() => setTick(t => t + 1)} style={ghostBtn} title="Recargar catálogos">↺</button>
-          <button onClick={submit} style={primaryBtn}>Enviar convocatoria</button>
+          <button onClick={submit} style={primaryBtn}>Crear convocatoria</button>
         </div>
       </div>
 
@@ -441,7 +389,7 @@ export function NuevaConvocatoria() {
             </div>
           </Panel>
 
-          <Panel title="Prioridad y modo de envío">
+          <Panel title="Prioridad y despacho">
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <Field label="Prioridad">
                 <div style={{ display: "flex", gap: 8 }}>
@@ -456,34 +404,6 @@ export function NuevaConvocatoria() {
                   ))}
                 </div>
               </Field>
-
-              <Field label="Modo de envío">
-                <div style={{ display: "flex", gap: 8 }}>
-                  {(["SECUENCIAL","MASIVO"] as const).map(m => (
-                    <button key={m} onClick={() => !( cuposNum > 1 && m === "SECUENCIAL") && setModoEnvio(m)}
-                      disabled={cuposNum > 1 && m === "SECUENCIAL"}
-                      style={{
-                        flex: 1, padding: "9px 0", borderRadius: 9, fontSize: 12.5, fontWeight: 600,
-                        border: `1.5px solid ${modoEnvio === m ? "rgba(21,101,192,0.60)" : "var(--border)"}`,
-                        background: modoEnvio === m ? "rgba(21,101,192,0.10)" : "var(--surface-2)",
-                        color: modoEnvio === m ? "var(--blue)" : "var(--muted)",
-                        cursor: cuposNum > 1 && m === "SECUENCIAL" ? "not-allowed" : "pointer",
-                        opacity: cuposNum > 1 && m === "SECUENCIAL" ? 0.5 : 1,
-                      }}>{m === "SECUENCIAL" ? "Secuencial" : "Masivo"}</button>
-                  ))}
-                </div>
-              </Field>
-
-              {modoFinal === "SECUENCIAL" && (
-                <>
-                  <Field label="Timeout sin ver (min)" hint="Si no ve la notif., pasa al siguiente">
-                    <input style={inputStyle} type="number" min={1} value={sinVerMin} onChange={e => setSinVerMin(Number(e.target.value))} />
-                  </Field>
-                  <Field label="Timeout sin responder (min)" hint="Si ve pero no responde, pasa al siguiente">
-                    <input style={inputStyle} type="number" min={1} value={sinResponderMin} onChange={e => setSinResponderMin(Number(e.target.value))} />
-                  </Field>
-                </>
-              )}
 
               {/* Modo de priorización */}
               <div style={{ gridColumn: "1 / -1" }}>
@@ -525,90 +445,6 @@ export function NuevaConvocatoria() {
             </div>
           </Panel>
 
-          {/* Auto-renovación */}
-          <Panel title="Auto-renovación">
-            <div style={{ display: "grid", gap: 12 }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-                <div
-                  onClick={() => setAutoRenew(v => !v)}
-                  style={{
-                    width: 40, height: 22, borderRadius: 11, flexShrink: 0,
-                    background: autoRenew ? "rgb(22,163,74)" : "var(--border)",
-                    position: "relative", cursor: "pointer", transition: "background 0.2s",
-                  }}
-                >
-                  <div style={{
-                    position: "absolute", top: 3, left: autoRenew ? 21 : 3,
-                    width: 16, height: 16, borderRadius: "50%",
-                    background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-                    transition: "left 0.2s",
-                  }} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
-                    Renovar automáticamente al vencer
-                  </div>
-                  <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2 }}>
-                    Si nadie acepta y vence, extiende el plazo y reenvía las invitaciones
-                  </div>
-                </div>
-              </label>
-
-              {autoRenew && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, paddingTop: 4 }}>
-                  <Field label="Extender por (minutos)" hint="Cuánto tiempo más se da al vencer">
-                    <input style={inputStyle} type="number" min={10} step={15}
-                      value={autoRenewMinutes}
-                      onChange={e => setAutoRenewMinutes(Math.max(10, Number(e.target.value)))} />
-                  </Field>
-                  <Field label="Máximo de renovaciones" hint="Se cancela si se supera este número">
-                    <input style={inputStyle} type="number" min={1} max={10}
-                      value={autoRenewMaxCount}
-                      onChange={e => setAutoRenewMaxCount(Math.max(1, Math.min(10, Number(e.target.value))))} />
-                  </Field>
-                  <div style={{
-                    gridColumn: "1 / -1", padding: "8px 12px", borderRadius: 8,
-                    background: "rgba(22,163,74,0.07)", border: "1px solid rgba(22,163,74,0.20)",
-                    fontSize: 12, color: "rgb(20,120,60)",
-                  }}>
-                    ♻ Se renovará hasta <b>{autoRenewMaxCount}×</b>, extendiendo <b>{autoRenewMinutes} min</b> cada vez.
-                    Total máximo: <b>{Math.round(autoRenewMinutes * autoRenewMaxCount / 60 * 10) / 10}h</b> adicionales.
-                  </div>
-                </div>
-              )}
-            </div>
-          </Panel>
-
-          <Panel title="Canales de envío">
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {canalesEnabled.map(canal => {
-                const meta = CANAL_META[canal];
-                const sel = canalesSel.includes(canal);
-                return (
-                  <button key={canal} onClick={() => toggleCanal(canal)} style={{
-                    display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 10,
-                    border: `2px solid ${sel ? `rgba(${meta.rgb},0.80)` : "var(--border)"}`,
-                    background: sel ? `rgba(${meta.rgb},0.10)` : "var(--surface-2)",
-                    color: sel ? `rgb(${meta.rgb})` : "var(--muted)",
-                    fontWeight: sel ? 700 : 500, fontSize: 13, cursor: "pointer", transition: "all 0.15s",
-                  }}>
-                    <span style={{ fontSize: 16 }}>{meta.icon}</span>
-                    {meta.label}
-                    {sel && <span style={{ fontSize: 12 }}>✓</span>}
-                  </button>
-                );
-              })}
-              {canalesEnabled.length === 0 && (
-                <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>
-                  Solo APP disponible. Configurá los canales en Configuración.
-                </p>
-              )}
-            </div>
-            {canalesSel.length > 0 && (
-              <p style={hintStyle}>Canal principal: <b>{CANAL_META[canalesSel[0]].label}</b>{canalesSel.length > 1 ? ` · también: ${canalesSel.slice(1).map(c => CANAL_META[c].label).join(", ")}` : ""}</p>
-            )}
-          </Panel>
-
           <Panel title="Notas">
             <textarea style={{ ...inputStyle, minHeight: 80, resize: "vertical" }}
               value={notas} onChange={e => setNotas(e.target.value)}
@@ -616,7 +452,7 @@ export function NuevaConvocatoria() {
           </Panel>
 
           {/* Preview orden */}
-          <Panel title={`Orden de contacto ${modoFinal === "SECUENCIAL" ? "(secuencial real)" : "(referencia)"}`}>
+          <Panel title="Orden de despacho (referencia)">
             {previewOrden.length === 0
               ? <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>Sin destinatarios seleccionados.</p>
               : (
