@@ -128,6 +128,6 @@ registra las respuestas de los médicos a mano, y carga el Parte Diario manualme
 
 ## Git & Deploy
 
-- Repo: https://github.com/thelion182/intra-mediflow (privado)
+- Repo: https://github.com/thelion182/intra-mediflow (público)
 - Branch: `main`
 - Mensaje de commit en español, imperativo
